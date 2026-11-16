@@ -17,3 +17,34 @@
   - 本地 `git init -b main`，首次提交 `ea8fc9a`。
   - 远端私有仓库 `http://panyunmeng.cn:3000/panyunmeng/3d-tan-ke-da-zhan.git`（仓库名按 AlphaDashDot 转写），`main` 已推送并建立跟踪。
 - 下一步：确认规格 → 搭 Vite + TS 工程骨架 → 垂直切片（操控 + 相机 + 碰撞 + 射击）。
+
+## 2026-11-17 · v1.0 实现与验收
+
+**完成内容**
+
+- 单人战役：10 关（`scripts/gen-levels.py` 生成，内置坦克连通性校验）、4 地形、4 道具、3 类敌人、双难度档
+- 渲染：程序化天空/地面/砖/钢/水/林纹理，InstancedMesh 合批，第三人称跟随相机（高度感知遮挡），3D 落点准星，粒子特效
+- 音频：WebAudio 合成炮击/爆炸/引擎/道具/过关/失败 + 极简低音循环（默认关）
+- 存档：localStorage（最高分、最远关、通关次数、难度、音效/音乐）
+- 联机：Node + ws 服务器，60 Hz 权威仿真 / 20 Hz 快照，4 位房间码，双人合作
+- 部署产物：Dockerfile（多阶段）+ docker-compose.yml + `docs/部署-FNOS.md`
+- 调试设施：`?debug / ?demo / ?drive / ?level / ?screen`
+
+**验证结果**
+
+- `npm test`：59 项单测全绿（含 10 关战役连通性、确定性、实体不泄漏、边界）
+- `node scripts/net-smoke.mjs`：两端 3 s 各推进 9.75 m、40 帧快照、同 tick 一致 40/40
+- 浏览器实机：单人自动驾驶连续运行、联机双端同屏（`players p1@… p2@…`）
+
+**踩到的关键坑（供后续参考）**
+
+1. 本机 `%TEMP%` 有 ACL 限制，esbuild 清理临时文件报 Access is denied → `scripts/build.mjs` 统一把 TEMP/TMP 指到工作区 `.tmp/`
+2. `ws` 打进 ESM bundle 会因动态 `require('events')` 崩 → esbuild 设 `external: ['ws', ...]`，运行时装生产依赖
+3. 这个浏览器环境里 `requestPointerLock()` 抛 `WrongDocumentError`，异常直接打断 rAF 主循环 → 已 try/catch + 主循环兜底
+4. 隐藏标签页会挂起 rAF（`visibilityState=hidden`），自动化截图看到的是冻结帧 → `?demo/?drive` 模式下用定时器按真实时间补齐帧
+5. 坦克碰撞半径 1.05 时会被 2 m 宽走廊卡死（第 7 关玩家与 AI 同时卡住）→ 半径降到 0.95，并在关卡生成器里加连通性校验
+
+**下一步（可选）**
+
+- 对抗模式（双人 PvP）、更多关卡、道具扩展
+- 若要在 NAS 上真实部署：`docker compose up -d --build` 后按 `docs/部署-FNOS.md` 验证 `/healthz`

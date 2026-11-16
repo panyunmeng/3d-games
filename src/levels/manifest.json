@@ -1,0 +1,52 @@
+[
+  {
+    "id": 1,
+    "name": "训练场",
+    "file": "level01.json"
+  },
+  {
+    "id": 2,
+    "name": "砖巷",
+    "file": "level02.json"
+  },
+  {
+    "id": 3,
+    "name": "双河",
+    "file": "level03.json"
+  },
+  {
+    "id": 4,
+    "name": "堡垒",
+    "file": "level04.json"
+  },
+  {
+    "id": 5,
+    "name": "密林",
+    "file": "level05.json"
+  },
+  {
+    "id": 6,
+    "name": "铁壁",
+    "file": "level06.json"
+  },
+  {
+    "id": 7,
+    "name": "迷宫",
+    "file": "level07.json"
+  },
+  {
+    "id": 8,
+    "name": "湖心",
+    "file": "level08.json"
+  },
+  {
+    "id": 9,
+    "name": "要塞",
+    "file": "level09.json"
+  },
+  {
+    "id": 10,
+    "name": "终局",
+    "file": "level10.json"
+  }
+]

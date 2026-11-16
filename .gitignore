@@ -1,6 +1,6 @@
 node_modules/
 dist/
-.vite/
+dist-server/
+.tmp/
 *.log
 .DS_Store
-.agents/work/
