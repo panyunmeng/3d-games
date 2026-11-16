@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>3D 扫雷 · 矿洞</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23241c15'/%3E%3Ccircle cx='16' cy='17' r='8' fill='%231c1a18'/%3E%3Cpath d='M16 9v-5M16 25v4M8 17H3M29 17h-5M10.3 11.3 6.8 7.8M25.2 22.2l-3.5-3.5M21.7 11.3l3.5-3.5M6.8 26.2l3.5-3.5' stroke='%23c8863c' stroke-width='2.4' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='17' r='2.6' fill='%23ff6a1a'/%3E%3C/svg%3E" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+  <div id="vignette"></div>
+
+  <header id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="chip" id="chip-level">初级</div>
+      <div class="chip warn hidden" id="chip-assisted">练习局</div>
+    </div>
+
+    <div class="hud-center">
+      <div class="stat" title="剩余雷数">
+        <span class="stat-ico">⚑</span><span class="stat-num" id="mine-count">10</span>
+      </div>
+      <div class="clock" id="clock">0:00</div>
+      <div class="stat" title="完成度">
+        <span class="stat-ico">▦</span><span class="stat-num" id="progress-text">0%</span>
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <div class="chip best" id="chip-best">最佳 --:--</div>
+      <button class="icon-btn" id="btn-restart" type="button" title="重开本局">↻</button>
+      <button class="icon-btn" id="btn-undo" type="button" title="撤销一步">↶</button>
+      <button class="icon-btn" id="btn-hint" type="button" title="提示一格">✦</button>
+      <button class="icon-btn" id="btn-share" type="button" title="复制挑战链接">⧉</button>
+      <button class="icon-btn" id="btn-sound" type="button" title="音效开关">♪</button>
+      <button class="icon-btn" id="btn-menu" type="button" title="回到菜单">☰</button>
+    </div>
+  </header>
+
+  <section id="menu" class="overlay">
+    <div class="panel menu-panel">
+      <p class="eyebrow">MINE SWEEP · DEEP SHAFT</p>
+      <h1>立体扫雷</h1>
+      <p class="tagline">经典规则 · 矿洞岩层 · 拖动旋转视角，滚轮缩放</p>
+
+      <div class="levels" id="levels"></div>
+
+      <p class="seed-note hidden" id="seed-note"></p>
+
+      <ul class="rules">
+        <li><b>左键</b>挖开，<b>右键</b>插旗，<b>拖动</b>旋转，<b>滚轮</b>缩放</li>
+        <li>首击必定安全，0 格连锁展开</li>
+        <li>撤销与提示各 3 次，用过即记为练习局，不计最佳成绩</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="result" class="overlay hidden">
+    <div class="panel result-panel">
+      <p class="eyebrow" id="result-kicker">MISSION FAILED</p>
+      <h2 id="result-title">踩到地雷了</h2>
+
+      <div class="result-stats">
+        <div class="result-stat"><span class="result-label">用时</span><span class="result-value" id="result-time">0:00</span></div>
+        <div class="result-stat"><span class="result-label">完成度</span><span class="result-value" id="result-progress">0%</span></div>
+        <div class="result-stat"><span class="result-label">最佳</span><span class="result-value" id="result-best">--:--</span></div>
+      </div>
+
+      <p class="result-note hidden" id="result-note"></p>
+
+      <div class="actions">
+        <button class="btn primary" id="btn-again" type="button">再来一局</button>
+        <button class="btn" id="btn-change" type="button">换难度</button>
+        <button class="btn ghost" id="btn-share-result" type="button">复制挑战链接</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <div id="loading" class="loading">
+    <span class="loading-dot"></span><span>正在凿开矿洞…</span>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
