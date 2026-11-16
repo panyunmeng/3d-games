@@ -42,3 +42,11 @@
 - 窄屏真机未测：相机 `fitCamera()` 按宽高比取 max 距离，但没在手机竖屏上截图核对
 - T-spin 只验了构造用例与判定函数，没有在真实对局里打出 T-spin double 的录像
 - 无最高分榜（只有本地单条最高分）
+
+## 版本管理
+
+- 本地仓库：`git init` + 首次提交 `1f520a5`（main）
+- 远端：`http://panyunmeng.cn:3000/panyunmeng/3d-eluosifangkuai.git`（私有，默认分支 main）
+- 仓库名按 Gitea 的 AlphaDashDot 规则转写拼音：`3D俄罗斯方块` → `3d-eluosifangkuai`
+  （与同系列 `3d-dazhuankuai`、`3d-sao-lei` 的命名风格一致）
+- `.agents/` 一并入库：约束与台账是工程的一部分；`work/visual/` 里的截图是验收证据
