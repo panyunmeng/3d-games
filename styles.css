@@ -421,9 +421,9 @@ h1 {
   color: var(--copper-2);
   font-size: 13px;
   letter-spacing: 0.04em;
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transition: opacity 0.25s, transform 0.25s;
+  transition: transform 0.25s;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
   max-width: min(720px, 86vw);
   text-align: center;
@@ -432,7 +432,6 @@ h1 {
 }
 
 .toast.show {
-  opacity: 1;
   transform: translate(-50%, 0);
 }
 
