@@ -977,6 +977,8 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   var showFps = params.get('fps') === '1';
   var autoN = Math.max(0, Math.min(200, Number(params.get('autoplay') || 0)));
   var scenario = params.get('scenario') || '';
+  // demo / scenario 是调试盘面，里面的分数不是玩家打出来的，不能写进最高分
+  var noBestSave = isDemo || scenario !== '';
   var seedParam = params.get('seed');
   var SEED = seedParam ? (Number(seedParam) >>> 0) : (Date.now() & 0xffffffff);
 
@@ -1512,7 +1514,7 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   function onGameOver() {
     if (overHandled) return;
     overHandled = true;
-    if (state.score > best) {
+    if (!noBestSave && state.score > best) {
       best = state.score;
       try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) { /* 隐私模式忽略 */ }
     }
