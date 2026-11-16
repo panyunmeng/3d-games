@@ -282,3 +282,86 @@ test('三档难度的雷数与格数都在合法区间', () => {
   assert.equal(HARD.mines, 99);
   assert.equal(MEDIUM.cols * MEDIUM.rows, 256);
 });
+
+test('和弦：旗数相符时一次展开其余邻格，且只占一个撤销快照', () => {
+  const g = newGame(MEDIUM, 'chord-open');
+  g.reveal(g.indexOf(8, 8));
+
+  // 找一个已挖开的数字格，且它还有未挖开的安全邻格
+  let target = -1;
+  for (let i = 0; i < g.size; i++) {
+    if (g.state[i] !== REVEALED || g.adj[i] === 0) continue;
+    const hiddenSafe = g.neighbors(i).filter((nb) => !g.mine[nb] && g.state[nb] === HIDDEN);
+    if (hiddenSafe.length > 0) {
+      target = i;
+      break;
+    }
+  }
+  assert.ok(target >= 0, '盘面上找不到可和弦的数字格');
+
+  const nbrs = g.neighbors(target);
+  for (const nb of nbrs) if (g.mine[nb]) g.toggleFlag(nb);
+  const hiddenSafe = nbrs.filter((nb) => !g.mine[nb] && g.state[nb] === HIDDEN);
+  const before = Uint8Array.from(g.state);
+
+  const res = g.chord(target);
+  assert.equal(res.ok, true);
+  assert.equal(res.mine, false);
+  for (const h of hiddenSafe) assert.equal(g.state[h], REVEALED);
+
+  // 整次和弦只进一个快照，撤销要能整体退回
+  assert.equal(g.undo(), true);
+  assert.deepEqual(Array.from(g.state), Array.from(before));
+});
+
+test('和弦：旗数不符或格未挖开时什么都不做', () => {
+  const g = newGame(MEDIUM, 'chord-reject');
+  g.reveal(g.indexOf(8, 8));
+
+  let num = -1;
+  for (let i = 0; i < g.size; i++) {
+    if (g.state[i] === REVEALED && g.adj[i] > 0) {
+      num = i;
+      break;
+    }
+  }
+  assert.ok(num >= 0);
+  const before = Uint8Array.from(g.state);
+
+  const mismatch = g.chord(num);
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.reason, 'flags-mismatch');
+  assert.deepEqual(Array.from(g.state), Array.from(before));
+
+  const hidden = [...Array(g.size).keys()].find((i) => g.state[i] === HIDDEN);
+  assert.equal(g.chord(hidden).reason, 'not-open');
+});
+
+test('和弦：旗插错会踩雷，与经典一致', () => {
+  const g = newGame(MEDIUM, 'chord-boom');
+  g.reveal(g.indexOf(8, 8));
+
+  let target = -1;
+  for (let i = 0; i < g.size; i++) {
+    if (g.state[i] !== REVEALED || g.adj[i] === 0) continue;
+    const nbrs = g.neighbors(i);
+    const hiddenSafe = nbrs.filter((nb) => !g.mine[nb] && g.state[nb] === HIDDEN);
+    const hiddenMine = nbrs.filter((nb) => g.mine[nb] && g.state[nb] === HIDDEN);
+    if (hiddenSafe.length >= g.adj[i] && hiddenMine.length > 0) {
+      target = i;
+      break;
+    }
+  }
+  assert.ok(target >= 0, '盘面上找不到可制造错旗的数字格');
+
+  const nbrs = g.neighbors(target);
+  const hiddenSafe = nbrs.filter((nb) => !g.mine[nb] && g.state[nb] === HIDDEN);
+  for (const nb of hiddenSafe.slice(0, g.adj[target])) g.toggleFlag(nb);
+
+  const res = g.chord(target);
+  assert.equal(res.ok, true);
+  assert.equal(res.mine, true);
+  assert.equal(g.status, 'lost');
+  assert.ok(g.explodedIndex >= 0);
+  assert.equal(g.undo(), false); // 结束了不能撤销
+});

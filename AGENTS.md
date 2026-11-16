@@ -19,6 +19,9 @@ node --test "tests/*.test.mjs"  # 规则层单测
 npm test                        # 同上（npm 只是入口，不装依赖）
 ```
 
+浏览器回归（右键插旗、双击和弦、拖拽不误挖、撤销/提示/重开）：
+启动服务后打开 `http://127.0.0.1:5502/tests/browser/interaction-test.html`，标题显示 `PASS n/n` 即全绿。
+
 `file://` 下 ES Module 会被同源策略拦掉，必须走本地服务。
 
 ## 目录
@@ -34,7 +37,7 @@ src/textures.js       程序化贴图
 src/audio.js          WebAudio 合成音效
 src/ui.js             DOM 层
 src/main.js           入口与状态机
-tests/                规则层单测
+tests/                规则层单测 + tests/browser 浏览器回归页
 vendor/               three.js 本地副本
 .agents/              context 台账、work 过程文件
 ```

@@ -73,7 +73,7 @@ function refreshHud() {
   ui.setHintEnabled(!over && hintLeft > 0, Math.max(0, hintLeft));
 }
 
-function startLevel(key, seed) {
+function startLevel(key, seed, keepView = false) {
   const lvl = LEVELS[key];
   levelKey = key;
   game = new Game(lvl, seed || randomSeed());
@@ -83,13 +83,14 @@ function startLevel(key, seed) {
 
   stage.setMenuFocus(false);
   stage.setAutoRotate(false);
-  stage.resetView();
+  if (!keepView) stage.resetView();
 
   state = 'playing';
   elapsed = 0;
   timerRunning = false;
   started = false;
   pendingSeed = null;
+  lastClick = null;
 
   ui.hideMenu();
   ui.hideResult();
@@ -106,6 +107,7 @@ function startLevel(key, seed) {
 
 function goMenu() {
   state = 'menu';
+  lastClick = null;
   timerRunning = false;
   ui.hideResult();
   ui.showMenu(
@@ -173,6 +175,35 @@ function reveal(index) {
     return;
   }
 
+  refreshHud();
+}
+
+/** 双击数字 / 中键：旗数与数字相符时一次展开周围。 */
+function doChord(index) {
+  const res = game.chord(index);
+  if (!res.ok) return;
+
+  if (!started) {
+    started = true;
+    startTimer();
+  }
+
+  board.sync(game);
+
+  if (res.mine) {
+    sound.boom();
+    finishGame(false);
+    return;
+  }
+  if (res.opened.length >= 3) sound.openArea();
+  else sound.tap();
+
+  if (game.status === 'won') {
+    sound.win();
+    board.celebrate();
+    finishGame(true);
+    return;
+  }
   refreshHud();
 }
 
@@ -266,6 +297,7 @@ function shareLink() {
 let drag = null;
 let hoverRaf = 0;
 let hoverEvent = null;
+let lastClick = null;
 
 function pick(e) {
   const ndc = stage.toNdc(e.clientX, e.clientY);
@@ -283,6 +315,12 @@ canvas.addEventListener('pointerdown', (e) => {
   if (e.button === 2) {
     const i = pick(e);
     if (i >= 0) toggleFlag(i);
+    return;
+  }
+  if (e.button === 1) {
+    e.preventDefault();
+    const i = pick(e);
+    if (i >= 0) doChord(i);
     return;
   }
   if (e.button !== 0) return;
@@ -333,8 +371,20 @@ canvas.addEventListener('pointerup', (e) => {
   if (wasDrag) return;
   if (state !== 'playing' || game.isOver) return;
   const i = pick(e);
-  if (i >= 0) reveal(i);
+  if (i < 0) return;
+
+  const now = performance.now();
+  if (lastClick && lastClick.index === i && now - lastClick.time < 350) {
+    lastClick = null;
+    doChord(i);
+    return;
+  }
+  lastClick = { index: i, time: now };
+  reveal(i);
 });
+
+// 中键的默认行为（Windows 自动滚动）要一并拦掉
+canvas.addEventListener('auxclick', (e) => e.preventDefault());
 
 canvas.addEventListener('pointercancel', () => {
   drag = null;
@@ -354,7 +404,7 @@ canvas.addEventListener(
 
 ui.on('onLevel', (key) => startLevel(key, pendingSeed))
   .on('onRestart', () => {
-    if (state === 'playing') startLevel(levelKey, null);
+    if (state === 'playing') startLevel(levelKey, null, true);
   })
   .on('onUndo', doUndo)
   .on('onHint', doHint)
@@ -367,7 +417,7 @@ ui.on('onLevel', (key) => startLevel(key, pendingSeed))
   .on('onMenu', () => {
     if (state === 'playing') goMenu();
   })
-  .on('onAgain', () => startLevel(levelKey, null))
+  .on('onAgain', () => startLevel(levelKey, null, true))
   .on('onChange', () => goMenu());
 
 // ---------------------------------------------------------------- 主循环

@@ -11,6 +11,8 @@ node scripts/serve.mjs          # http://127.0.0.1:5502/
 node --test "tests/*.test.mjs"  # 规则层单测
 ```
 
+浏览器回归：跑起服务后打开 `http://127.0.0.1:5502/tests/browser/interaction-test.html`，标题变成 `PASS n/n` 即全绿。
+
 直接双击 `index.html` 打不开——ES Module 在 `file://` 下会被同源策略拦掉，必须走本地静态服务。
 
 ## 玩法
@@ -18,6 +20,7 @@ node --test "tests/*.test.mjs"  # 规则层单测
 - **左键**挖开，**右键**插旗，**拖动**旋转视角，**滚轮**缩放。
 - 首击必定安全；0 格连锁展开。
 - 三档难度：初级 9×9/10 雷、中级 16×16/40 雷、高级 30×16/99 雷。
+- **双击数字**或按**中键**：旗数与数字相符时一次展开周围（和弦）。
 - 撤销、提示各 3 次；用过其一，本局记为「练习局」，不计最佳成绩。
 - 最佳成绩按难度存在 localStorage。
 
@@ -39,6 +42,6 @@ src/textures.js   程序化贴图（岩石 / 铜色数字 / 焦痕）
 src/audio.js      WebAudio 合成音效
 src/ui.js         DOM 层
 src/main.js       入口与状态机
-tests/            规则层单测
+tests/            规则层单测 + 浏览器回归页（tests/browser）
 vendor/           three.module.js（本地副本）
 ```

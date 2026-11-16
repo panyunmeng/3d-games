@@ -35,6 +35,8 @@ export class Board {
     this.rows = 0;
     this.cells = [];
     this.hiddenMeshes = [];
+    // 和弦要能点到「已挖开」的数字格：拾取集合必须同时包含岩块与底板
+    this.pickMeshes = [];
     this.tweens = [];
     this.timers = [];
     this.hoverIndex = -1;
@@ -209,12 +211,15 @@ export class Board {
     hidden.userData.index = index;
     this.group.add(hidden);
     this.hiddenMeshes.push(hidden);
+    this.pickMeshes.push(hidden);
 
     const slab = new THREE.Mesh(this.slabGeo, this.slabMat);
     slab.position.set(x, 0, z);
     slab.receiveShadow = true;
     slab.visible = false;
+    slab.userData.index = index;
     this.group.add(slab);
+    this.pickMeshes.push(slab);
 
     const num = new THREE.Mesh(this.numGeo, this.numberMats[1]);
     num.position.set(x, BOARD.slabHeight + 0.008, z);
@@ -497,12 +502,13 @@ export class Board {
     this.hoverEdge.visible = false;
   }
 
-  /** 射线拾取：只认还立着的岩石块，返回格子下标，-1 表示没点到。 */
+  /** 射线拾取：岩块与底板都算，返回格子下标，-1 表示没点到。 */
   pick(raycaster) {
-    const hits = raycaster.intersectObjects(this.hiddenMeshes, false);
+    const hits = raycaster.intersectObjects(this.pickMeshes, false);
     for (const hit of hits) {
+      if (!hit.object.visible) continue;
       const i = hit.object.userData.index;
-      if (this.cells[i] && this.cells[i].hidden.visible) return i;
+      if (this.cells[i]) return i;
     }
     return -1;
   }
@@ -564,6 +570,8 @@ export class Board {
     }
     this.cells = [];
     this.hiddenMeshes = [];
+    // 和弦要能点到「已挖开」的数字格：拾取集合必须同时包含岩块与底板
+    this.pickMeshes = [];
     this.tweens.length = 0;
     this.timers.length = 0;
     this.hoverIndex = -1;

@@ -180,6 +180,53 @@ export class Game {
   }
 
   /**
+   * 和弦展开（双击数字 / 中键）：已挖开的数字格，周围旗数恰好等于数字时，
+   * 一次挖开其余未插旗的邻格。旗数不符则什么都不做；旗插错就会踩雷，和经典扫雷一致。
+   * 返回 {ok, opened, mine, status, reason}。
+   */
+  chord(index) {
+    if (this.isOver) return { ok: false, reason: 'over' };
+    if (!Number.isInteger(index) || index < 0 || index >= this.size) {
+      return { ok: false, reason: 'range' };
+    }
+    if (this.state[index] !== REVEALED) return { ok: false, reason: 'not-open' };
+
+    const adj = this.adj[index];
+    if (adj === 0) return { ok: false, reason: 'zero' };
+
+    let flags = 0;
+    for (const nb of this.nbrs[index]) if (this.state[nb] === FLAGGED) flags += 1;
+    if (flags !== adj) return { ok: false, reason: 'flags-mismatch' };
+
+    const targets = this.nbrs[index].filter((nb) => this.state[nb] === HIDDEN);
+    if (!targets.length) return { ok: false, reason: 'nothing' };
+
+    // 一次和弦只占一个撤销快照：撤销要能整体退回
+    const snap = this.snapshot();
+    const opened = [];
+    let boom = -1;
+    for (const t of targets) {
+      if (this.mine[t]) {
+        boom = t;
+        break;
+      }
+      opened.push(...this.flood(t));
+    }
+
+    if (boom >= 0) {
+      this.state[boom] = REVEALED;
+      this.explodedIndex = boom;
+      this.status = 'lost';
+      return { ok: true, mine: true, status: 'lost', opened };
+    }
+
+    this.undoStack.push(snap);
+    if (this.undoStack.length > UNDO_LIMIT) this.undoStack.shift();
+    this.checkWin();
+    return { ok: true, mine: false, status: this.status, opened };
+  }
+
+  /**
    * 提示一格：优先挑贴着已挖开区域的未挖开安全格（对推进有用），否则随便挑一个安全格。
    * 返回 {index, result} 或 null（次数用完 / 已结束 / 没得提示）。
    */
