@@ -1794,12 +1794,18 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
     el.soundBtn.textContent = muted ? '🔇' : '🔊';
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden && state.status === 'playing') {
+  // 切标签页（hidden）与切到别的程序（window blur）都要暂停：
+  // 后者时标签页仍然「可见」，不处理的话方块会在用户看别处时继续掉落。
+  function autoPause() {
+    if (state.status === 'playing') {
       C.pause(state);
       showPaused();
     }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) autoPause();
   });
+  window.addEventListener('blur', autoPause);
 
   // ---------------------------------------------------------------- 主循环
   var lastT = 0;
