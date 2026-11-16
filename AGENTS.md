@@ -21,6 +21,7 @@ pnpm build      # 类型检查 + 产出 dist/
 pnpm preview    # 预览 dist/
 pnpm tsx tools/balance.ts   # 无头平衡测试（三关 × 三难度）
 pnpm tsx tools/balance.ts 2 # 只跑第 2 关
+pnpm tsx tools/endless-check.ts  # 无尽模式冒烟：推到 30 波查数值/不崩
 ```
 
 ## 目录

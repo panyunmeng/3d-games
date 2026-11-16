@@ -257,6 +257,10 @@ class Game implements UiBridge {
         break;
       case 'kill':
         this.audio.play('kill');
+        if (e.boss) {
+          this.audio.play('victory');
+          this.ui.banner('首 领 击 破', '防线压力骤减', 'boss', 2000);
+        }
         break;
       case 'leak':
         this.audio.play('leak');
@@ -477,7 +481,21 @@ class Game implements UiBridge {
 
   // ---------- 每帧 ----------
 
+  private fpsAcc = 0;
+  private fpsFrames = 0;
+
   private frame(dt: number): void {
+    if (import.meta.env.DEV) {
+      this.fpsAcc += dt;
+      this.fpsFrames++;
+      if (this.fpsAcc >= 0.5) {
+        const fps = Math.round(this.fpsFrames / this.fpsAcc);
+        const enemies = this.sim?.enemies.length ?? 0;
+        this.ui.setFps(`${fps} fps · ${enemies} 敌`);
+        this.fpsAcc = 0;
+        this.fpsFrames = 0;
+      }
+    }
     const sim = this.sim;
     if (sim) {
       this.view.sync(sim, dt);

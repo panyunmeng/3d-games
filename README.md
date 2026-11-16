@@ -47,8 +47,9 @@ pnpm build      # 类型检查 + 产出 dist/
 pnpm preview    # 预览 dist/（http://127.0.0.1:5318）
 ```
 
-开发模式下有两个验收用的作弊键（仅 `import.meta.env.DEV` 生效，生产包不含）：
-`G` +600 金币、`K` 清空当前波、`J` 跳到第 10 波、`L` 生命清零。
+开发模式下有验收用的作弊键（仅 `import.meta.env.DEV` 生效，生产包不含）：
+`G` +600 金币、`K` 清空当前波、`J` 跳到第 10 波、`L` 生命清零；
+右下角还会显示帧率与当前存活敌人数，方便看性能。
 
 ## 平衡测试
 
@@ -58,6 +59,7 @@ pnpm preview    # 预览 dist/（http://127.0.0.1:5318）
 ```bash
 pnpm tsx tools/balance.ts        # 三关 × 三难度全跑
 pnpm tsx tools/balance.ts 2      # 只跑第 2 关
+pnpm tsx tools/endless-check.ts  # 无尽模式冒烟：铺满 13 塔推到 30 波，查数值不崩
 ```
 
 当前结果（2026-11-17）：简单全部 0 漏怪通关；普通全部通关、0～1 漏怪；困难第 1、3 关在 8 波后失守，

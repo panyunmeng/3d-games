@@ -83,6 +83,11 @@ export class UI {
     selPanel: HTMLElement;
     hint: HTMLElement;
     speed: HTMLElement;
+    boss: HTMLElement;
+    bossName: HTMLElement;
+    bossHp: HTMLElement;
+    bossFill: HTMLElement;
+    fps: HTMLElement;
   };
 
   private levelGrid!: HTMLElement;
@@ -146,6 +151,11 @@ export class UI {
       selPanel: this.q('#sel-panel'),
       hint: this.q('#hud-hint'),
       speed: this.q('#hud-speed'),
+      boss: this.q('#hud-boss'),
+      bossName: this.q('#hud-boss-name'),
+      bossHp: this.q('#hud-boss-hp'),
+      bossFill: this.q('#hud-boss-fill'),
+      fps: this.q('#hud-fps'),
     };
     this.levelGrid = this.q('#level-grid');
     this.diffTabs = this.q('#diff-tabs');
@@ -262,6 +272,11 @@ export class UI {
 
       <div class="wave-preview" id="hud-preview"></div>
 
+      <div class="boss-bar hidden" id="hud-boss">
+        <div class="boss-name"><span id="hud-boss-name">督军机甲</span><span id="hud-boss-hp"></span></div>
+        <div class="boss-track"><i id="hud-boss-fill"></i></div>
+      </div>
+
       <div class="sel-panel panel hidden" id="sel-panel"></div>
 
       <div class="hud-bottom">
@@ -269,6 +284,7 @@ export class UI {
       </div>
 
       <div class="hud-hint" id="hud-hint"></div>
+      <div class="fps-readout hidden" id="hud-fps">-- fps</div>
     </div>
 
     <div class="overlay hidden" id="ov-pause">
@@ -758,7 +774,28 @@ export class UI {
         : '';
     }
 
+    this.updateBossBar(sim);
     this.updateSelectedPanel(sim);
+  }
+
+  setFps(text: string): void {
+    this.hudEls.fps.classList.remove('hidden');
+    this.hudEls.fps.textContent = text;
+  }
+
+  private updateBossBar(sim: Simulation): void {
+    const boss = sim.enemies.find((e) => e.def.boss && e.alive);
+    if (!boss) {
+      if (!this.hudEls.boss.classList.contains('hidden')) this.hudEls.boss.classList.add('hidden');
+      return;
+    }
+    this.hudEls.boss.classList.remove('hidden');
+    const ratio = Math.max(0, Math.min(1, boss.hp / boss.maxHp));
+    this.hudEls.bossName.textContent = boss.def.name;
+    this.hudEls.bossHp.textContent = `${Math.ceil(boss.hp)} / ${boss.maxHp}`;
+    this.hudEls.bossFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    this.hudEls.bossFill.style.background =
+      ratio > 0.5 ? 'linear-gradient(90deg,#ff2e63,#ff6b8a)' : 'linear-gradient(90deg,#ff8a3d,#ff2e63)';
   }
 
   private refreshCardAffordability(sim: Simulation): void {
@@ -797,6 +834,9 @@ export class UI {
       this.last.selLevel = tower.level;
       this.last.selUpgradeReady = canUpgrade;
       const dps = (stats.damage * stats.rate).toFixed(1);
+      const nextLine = nextStats
+        ? `<div style="grid-column:1/-1;color:var(--accent)">LV${tower.level + 1} → 伤害 <b>${nextStats.damage}</b> · 射速 <b>${nextStats.rate.toFixed(2)}</b> · 射程 <b>${nextStats.range.toFixed(1)}</b> · DPS <b>${(nextStats.damage * nextStats.rate).toFixed(1)}</b></div>`
+        : '';
       const extra: string[] = [];
       if (stats.aoe > 0) extra.push(`爆炸半径 <b>${stats.aoe.toFixed(1)}</b>`);
       if (stats.chain > 0) extra.push(`连锁 <b>${stats.chain}</b> 目标`);
@@ -813,6 +853,7 @@ export class UI {
           <div>射程 <b>${stats.range.toFixed(1)}</b></div>
           <div>DPS <b>${dps}</b></div>
           ${extra.map((e) => `<div style="grid-column:1/-1">${e}</div>`).join('')}
+          ${nextLine}
         </div>
         <div class="sel-actions">
           ${

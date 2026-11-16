@@ -652,6 +652,56 @@ body {
   opacity: 1;
 }
 
+.fps-readout {
+  position: absolute;
+  right: 16px;
+  bottom: 122px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* BOSS 血条 */
+.boss-bar {
+  position: absolute;
+  left: 50%;
+  top: 156px;
+  transform: translateX(-50%);
+  width: min(520px, 76vw);
+  padding: 8px 14px 10px;
+  background: linear-gradient(180deg, rgba(28, 8, 16, 0.9), rgba(12, 4, 8, 0.9));
+  border: 1px solid rgba(255, 45, 99, 0.45);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  pointer-events: none;
+}
+
+.boss-name {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  color: #ff9db4;
+  margin-bottom: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.boss-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.boss-track > i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff2e63, #ff6b8a);
+  transition: width 0.12s linear;
+  box-shadow: 0 0 12px rgba(255, 45, 99, 0.7);
+}
+
 /* 选中塔面板 */
 .sel-panel {
   position: absolute;
