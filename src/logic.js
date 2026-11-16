@@ -283,8 +283,12 @@ export class Game {
   }
 
   checkWin() {
-    if (this.revealedSafe === this.totalSafe) {
-      this.status = 'won';
+    if (this.revealedSafe !== this.totalSafe) return;
+    this.status = 'won';
+    // 胜利时把剩余雷自动插旗：HUD 的「剩余雷数」要归零，不能还挂着未插旗的雷数
+    for (let i = 0; i < this.size; i++) {
+      if (this.mine[i]) this.state[i] = FLAGGED;
     }
+    this.flags = this.mineCount;
   }
 }

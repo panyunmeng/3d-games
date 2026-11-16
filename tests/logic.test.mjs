@@ -159,6 +159,12 @@ test('胜利判定：所有非雷格挖开即赢，且插错的旗不算赢', ()
   g.reveal(safeHidden);
   assert.equal(g.status, 'won');
   assert.equal(g.revealedSafe, g.totalSafe);
+  // 胜利后剩余雷自动插旗：剩余雷数归零，所有雷格都是旗
+  assert.equal(g.flags, g.mineCount);
+  assert.equal(g.remaining, 0);
+  for (let i = 0; i < g.size; i++) {
+    if (g.mine[i]) assert.equal(g.state[i], FLAGGED);
+  }
 });
 
 test('踩雷：立即失败，标记爆炸格，其它雷在结算视图里可见', () => {
