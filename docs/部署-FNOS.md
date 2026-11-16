@@ -1,5 +1,11 @@
 # 部署到 FNOS（或任意 Linux / Docker 环境）
 
+> **本机 NAS 已完成部署（2026-11-17）**
+>
+> - 地址：`http://panyunmeng.cn:8080/`（局域网：`http://192.168.1.100:8080/`）
+> - 主机路径：`/home/panyunmeng/tank3d`，容器名 `tank3d`，镜像 `tank3d:1.0.0`，端口 `8080 → 3000`
+> - 重建方式见文末「更新已部署实例」
+
 游戏是**单进程单端口**：同一个 Node 进程既提供静态页面，也提供 WebSocket 联机。所以部署只需要跑一个容器（或一个 node 进程），不需要 nginx 之外的额外服务。
 
 ## 方式一：Docker Compose（推荐）
@@ -65,12 +71,34 @@ location /ws {
 
 WebSocket 必须带 `Upgrade` / `Connection` 头，否则联机会连不上（页面能打开但点「创建房间」会提示连接失败）。
 
-## 更新版本
+## 更新已部署实例
 
 ```bash
-git pull
-docker compose up -d --build
+# 在 NAS 上（或把新源码同步过去之后）
+cd /home/panyunmeng/tank3d
+sudo env NPM_REGISTRY=https://registry.npmmirror.com docker compose build
+sudo docker compose up -d
+curl -s http://127.0.0.1:8080/healthz
 ```
+
+## 本次实际部署记录（2026-11-17）
+
+现场事实，照抄可复现：
+
+| 项 | 值 |
+|---|---|
+| NAS | FNOS（Dell R730），Docker 28.5.2 / Compose v2.40.3，数据根 `/vol2/docker` |
+| 端口 | **8080**（NAS 的 3000 已被 Gitea 占用，必须换端口） |
+| 代码位置 | `/home/panyunmeng/tank3d`（源码从 Windows 侧打包 scp 过去，未在 NAS 上 clone） |
+| 构建 | `sudo env NPM_REGISTRY=https://registry.npmmirror.com docker compose build`，NAS 直连 npmjs 太慢，走 npmmirror |
+| 基础镜像 | `node:22-alpine` 通过 daemon 已配置的镜像源（`docker.fnnas.com`）拉取成功 |
+| 镜像体积 | 171 MB；构建耗时约 25 s（56 核） |
+| 验收 | `/healthz` 200；`net-smoke` 打到 NAS：3 s 收 62 帧快照、双端各推进 15.25 m、同 tick 一致 62/62；浏览器实机双人同屏可玩 |
+
+踩到的两个坑：
+
+1. **`npm ci` 失败**：本地 `package.json` 改过依赖分组（`three` 移到 devDependencies）但没有重新生成 `package-lock.json`，容器里 `npm ci` 严格校验直接报错。修法：本地 `npm install --package-lock-only` 同步锁文件后再打镜像。
+2. **终端里 `docker` 报 permission denied**：`panyunmeng` 不在 docker 组，所有 docker 命令都要 `sudo -S`。想省事可执行 `sudo usermod -aG docker panyunmeng` 后重新登录（本次没改，避免动用户组）。
 
 容器内无持久化数据（存档在玩家浏览器 localStorage 里），所以重建容器不影响任何人的进度。
 

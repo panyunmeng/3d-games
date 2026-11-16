@@ -1,8 +1,9 @@
 # ── 构建阶段：装全部依赖、编译前端与联机服务器 ────────────────────
 FROM node:22-alpine AS build
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --registry=$NPM_REGISTRY
 COPY tsconfig.json vite.config.ts vitest.config.ts index.html ./
 COPY src ./src
 COPY server ./server
@@ -11,11 +12,12 @@ RUN node scripts/build.mjs
 
 # ── 运行阶段：只保留运行时需要的 ws 依赖与构建产物 ─────────────────
 FROM node:22-alpine AS runtime
+ARG NPM_REGISTRY=https://registry.npmjs.org
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN npm ci --omit=dev --no-audit --no-fund --registry=$NPM_REGISTRY && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server
 EXPOSE 3000

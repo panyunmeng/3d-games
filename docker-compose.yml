@@ -1,12 +1,16 @@
-# FNOS / 群晖 / 任意 Linux：docker compose up -d
+# FNOS / 群晖 / 任意 Linux：docker compose up -d --build
+# 国内网络可先 export NPM_REGISTRY=https://registry.npmmirror.com 再构建
 services:
   tank3d:
-    build: .
+    build:
+      context: .
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     image: tank3d:1.0.0
     container_name: tank3d
     restart: unless-stopped
     ports:
-      - "8080:3000"        # 左边改成你想在 NAS 上用的端口
+      - "8080:3000"        # 左边改成你想在 NAS 上用的端口（NAS 的 3000 已被 Gitea 占用）
     environment:
       - PORT=3000
     healthcheck:

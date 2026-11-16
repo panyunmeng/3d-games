@@ -48,3 +48,12 @@
 
 - 对抗模式（双人 PvP）、更多关卡、道具扩展
 - 若要在 NAS 上真实部署：`docker compose up -d --build` 后按 `docs/部署-FNOS.md` 验证 `/healthz`
+
+## 2026-11-17 · 已自主部署到 NAS（FNOS）
+
+- **线上地址**：http://panyunmeng.cn:8080/ （局域网 192.168.1.100:8080），容器 `tank3d`，镜像 `tank3d:1.0.0`，端口 8080→3000
+- **主机路径**：`/home/panyunmeng/tank3d`；源码从 Windows 打包 scp，未在 NAS 上 clone
+- **构建参数**：`NPM_REGISTRY=https://registry.npmmirror.com`（NAS 直连 npmjs 慢）；基础镜像走 daemon 既有镜像源 `docker.fnnas.com`
+- **验收**：NAS 本机 `/healthz` 200；Windows 侧 `net-smoke ws://panyunmeng.cn:8080/ws` 通过（62 帧/3 s、双端各 15.25 m、同 tick 一致 62/62）；浏览器实机双人同屏可玩
+- **两个坑**：① 改过 package.json 依赖分组后没重建 lock，容器 `npm ci` 失败（已用 `npm install --package-lock-only` 修复并提交）；② `panyunmeng` 不在 docker 组，docker 命令都要 `sudo -S`
+- **遗留**：FNOS 上 3000 被 Gitea 占，所以用 8080；如需换端口改 `docker-compose.yml` 左侧端口后 `docker compose up -d`
