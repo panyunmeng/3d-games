@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>3D 贪吃蛇 · Jelly Snake</title>
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <!-- 顶部状态栏 -->
+  <header id="hud" class="hidden">
+    <div class="hud-left">
+      <div class="chip" id="chip-mode">无尽模式</div>
+      <div class="chip ghost" id="chip-wall">撞墙即死</div>
+    </div>
+    <div class="hud-center">
+      <div class="score-wrap">
+        <span class="score-label">得分</span>
+        <span class="score" id="score">0</span>
+      </div>
+      <div class="progress" id="progress">
+        <div class="progress-bar" id="progress-bar"></div>
+        <span class="progress-text" id="progress-text"></span>
+      </div>
+      <div class="timer" id="timer">
+        <div class="timer-bar" id="timer-bar"></div>
+        <span class="timer-text" id="timer-text"></span>
+      </div>
+    </div>
+    <div class="hud-right">
+      <div class="chip ghost" id="chip-speed">速度 1.0×</div>
+      <div class="chip ghost" id="chip-best">最高 0</div>
+      <div class="item-slots" id="item-slots"></div>
+    </div>
+  </header>
+
+  <!-- 关卡通过 / 提示横幅 -->
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- 主菜单 -->
+  <section id="menu" class="overlay">
+    <div class="panel">
+      <h1>3D 贪吃蛇<span>JELLY SNAKE</span></h1>
+      <p class="tagline">经典网格规则 · 立体果冻质感 · 鼠标拖拽可旋转视角</p>
+
+      <div class="field">
+        <label>玩法模式</label>
+        <div class="seg" data-group="mode">
+          <button class="seg-btn" data-value="endless">无尽模式</button>
+          <button class="seg-btn" data-value="level">关卡制</button>
+        </div>
+        <p class="hint" id="mode-hint"></p>
+      </div>
+
+      <div class="field">
+        <label>墙壁规则</label>
+        <div class="seg" data-group="wall">
+          <button class="seg-btn" data-value="classic">撞墙即死</button>
+          <button class="seg-btn" data-value="wrap">穿墙</button>
+        </div>
+        <p class="hint" id="wall-hint"></p>
+      </div>
+
+      <button id="start" class="primary">开始游戏 <kbd>Enter</kbd></button>
+
+      <div class="keys">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / 方向键 转向</div>
+        <div>鼠标拖拽 旋转视角 · 滚轮 缩放</div>
+        <div><kbd>空格</kbd> 暂停 · <kbd>R</kbd> 重开 · <kbd>M</kbd> 静音</div>
+      </div>
+      <div class="best" id="menu-best"></div>
+    </div>
+  </section>
+
+  <!-- 暂停 -->
+  <section id="pause" class="overlay hidden">
+    <div class="panel small">
+      <h2>已暂停</h2>
+      <p class="hint">按 空格 继续，或按 R 重新开始</p>
+      <button id="resume" class="primary">继续</button>
+      <button id="quit" class="secondary">回主菜单</button>
+    </div>
+  </section>
+
+  <!-- 结算 -->
+  <section id="over" class="overlay hidden">
+    <div class="panel small">
+      <h2 id="over-title">游戏结束</h2>
+      <p class="hint" id="over-reason"></p>
+      <div class="result">
+        <div><span id="over-score">0</span><small>本局得分</small></div>
+        <div><span id="over-best">0</span><small>最高分</small></div>
+        <div><span id="over-eaten">0</span><small>吃掉食物</small></div>
+      </div>
+      <button id="again" class="primary">再来一局 <kbd>R</kbd></button>
+      <button id="to-menu" class="secondary">回主菜单</button>
+    </div>
+  </section>
+
+  <div id="loading">加载中…</div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
