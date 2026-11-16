@@ -7,6 +7,10 @@
 - 音效全部 WebAudio 现场合成，**不加载任何外部图片 / 模型 / 音频文件**
 - 联机：房间码加入，60 Hz 服务器权威仿真、20 Hz 快照下发
 
+![主菜单](docs/images/menu.png)
+
+![战斗画面](docs/images/gameplay.png)
+
 ## 快速开始
 
 ```bash
