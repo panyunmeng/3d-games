@@ -3,6 +3,10 @@
 科幻机甲题材的 3D 塔防，Three.js + TypeScript + Vite。全部美术与音效在代码里程序化生成，
 没有任何模型、贴图、字体或音频文件，`dist/` 是一个可以放到任意静态路径下直接访问的纯前端包。
 
+![主菜单](docs/screenshots/01-menu.png)
+
+![战斗界面](docs/screenshots/02-battle.png)
+
 ## 玩法
 
 - **固定路线**：敌人沿关卡预设路线推进，只能站在路线旁的建造点上建塔。
