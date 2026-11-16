@@ -360,6 +360,10 @@ class Game implements UiBridge {
       if (tag === 'input' || tag === 'textarea') return;
 
       if (ev.code === 'Escape') {
+        if (this.state === 'settings') {
+          this.closeSettings();
+          return;
+        }
         if (this.ui.isPaused) {
           this.resume();
           return;

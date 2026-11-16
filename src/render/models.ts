@@ -218,7 +218,7 @@ export function buildEnemy(def: EnemyDef): EnemyVisual {
   const bodyMat = new THREE.MeshStandardMaterial({
     color: def.color,
     emissive: def.color,
-    emissiveIntensity: 0.18,
+    emissiveIntensity: 0.26,
     metalness: 0.55,
     roughness: 0.42,
     flatShading: true,

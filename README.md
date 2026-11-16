@@ -77,6 +77,7 @@ pnpm build
 ```
 
 已实测：把 `dist/` 放到子路径 `/game/` 下用静态服务器访问，页面、资源、存档全部正常。
+一键推送脚本：`./tools/deploy-nas.sh [user@host] [远端目录]`（内部先 `pnpm build` 再 `rsync`）。
 
 另外 `pnpm build:single` 会把 JS/CSS 内联成 **`dist/standalone.html` 单文件**（约 650 KB），
 不启服务、直接双击用 `file://` 打开也能玩——和这一系列其它 3D 小游戏同形态。
