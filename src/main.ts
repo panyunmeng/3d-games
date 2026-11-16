@@ -344,7 +344,7 @@ class Game implements UiBridge {
     this.canvas.addEventListener('pointerup', (ev) => {
       if (this.state !== 'playing' || !this.sim) return;
       if (ev.button === 2) {
-        this.deselect();
+        if (!this.view.pointerMoved) this.deselect();
         return;
       }
       if (ev.button !== 0 || this.view.pointerMoved) return;
