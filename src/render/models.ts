@@ -303,27 +303,41 @@ export function buildEnemy(def: EnemyDef): EnemyVisual {
       break;
     }
     case 'flyer': {
-      const body = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), bodyMat);
-      body.castShadow = true;
-      group.add(body);
+      const hull = new THREE.Mesh(new THREE.OctahedronGeometry(0.6, 0), bodyMat);
+      hull.scale.set(1, 0.6, 1);
+      hull.castShadow = true;
+      group.add(hull);
 
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), accentMat);
-      eye.position.set(0, 0, 0.32);
-      group.add(eye);
+      const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), glow(def.accent, 1.3));
+      canopy.position.y = 0.12;
+      group.add(canopy);
 
+      const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, 0.3, 8), darkMat);
+      thruster.position.y = -0.24;
+      group.add(thruster);
+
+      const rotorMat = new THREE.MeshBasicMaterial({
+        color: def.accent,
+        transparent: true,
+        opacity: 0.22,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
       for (let i = 0; i < 4; i++) {
-        const a = (i / 4) * Math.PI * 2;
-        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.08), darkMat);
-        arm.position.set(Math.cos(a) * 0.42, 0.06, Math.sin(a) * 0.42);
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.06, 0.09), darkMat);
+        arm.position.set(Math.cos(a) * 0.4, 0.02, Math.sin(a) * 0.4);
         arm.rotation.y = -a;
         group.add(arm);
 
         const rotor = new THREE.Group();
-        rotor.position.set(Math.cos(a) * 0.64, 0.1, Math.sin(a) * 0.64);
-        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.02, 0.06), glow(def.accent, 1.4));
-        rotor.add(blade);
-        const blade2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.5), glow(def.accent, 1.4));
-        rotor.add(blade2);
+        rotor.position.set(Math.cos(a) * 0.56, 0.04, Math.sin(a) * 0.56);
+        const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.015, 14), rotorMat);
+        rotor.add(disc);
+        const hub = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 5), glow(def.accent, 1.2));
+        hub.position.y = 0.02;
+        rotor.add(hub);
         group.add(rotor);
         rotors.push(rotor);
       }
@@ -338,7 +352,7 @@ export function buildEnemy(def: EnemyDef): EnemyVisual {
       eye.position.set(0, 0.06, 0.34);
       group.add(eye);
 
-      shieldMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.95, 2), ghostGlass(def.accent, 0.14));
+      shieldMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.72, 1), ghostGlass(def.accent, 0.12));
       shieldMesh.position.y = 0.02;
       group.add(shieldMesh);
       break;

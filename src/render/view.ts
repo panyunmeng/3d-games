@@ -17,6 +17,7 @@ export type Quality = 'low' | 'medium' | 'high';
 interface EnemyView {
   group: THREE.Group;
   marker: THREE.Mesh;
+  barHeight: number;
   baseScale: number;
   rotors: THREE.Object3D[];
   shield: THREE.Mesh | null;
@@ -476,6 +477,7 @@ export class GameView {
         view = this.makeEnemyView(visual, e.hp, e.maxShield, e.def.accent, e.def.scale);
         this.enemyViews.set(e.id, view);
         this.enemyGroup.add(view.marker);
+        this.enemyGroup.add(view.bar);
         this.enemyMarkers.set(e.id, view.marker);
       }
       const v = view;
@@ -487,8 +489,10 @@ export class GameView {
       const bob = e.def.flying ? Math.sin(this.time * 3 + e.id) * 0.18 : Math.abs(Math.sin(this.time * 6 + e.id)) * 0.06;
       v.group.position.set(e.x, (e.def.flying ? 2.3 : 0) + bob, e.z);
       v.group.rotation.y = v.angle;
+      v.marker.visible = true;
       v.marker.position.set(e.x, 0.06, e.z);
       (v.marker.material as THREE.MeshBasicMaterial).opacity = e.def.flying ? 0.32 : 0.5;
+      v.bar.position.set(e.x, (e.def.flying ? 2.3 : 0) + v.barHeight, e.z);
 
       const appear = Math.min(1, (this.time - v.bornAt) / 0.22);
       v.group.scale.setScalar(v.baseScale * (0.6 + appear * 0.4));
@@ -508,8 +512,15 @@ export class GameView {
       if (!enemyAlive.has(id)) {
         this.enemyGroup.remove(view.group);
         this.enemyGroup.remove(view.marker);
+        this.enemyGroup.remove(view.bar);
         view.marker.geometry.dispose();
         (view.marker.material as THREE.Material).dispose();
+        view.barFill.geometry.dispose();
+        view.barFillMat.dispose();
+        view.shieldBar.geometry.dispose();
+        view.shieldBarMat.dispose();
+        view.hpBg.geometry.dispose();
+        (view.hpBg.material as THREE.Material).dispose();
         this.enemyMarkers.delete(id);
         this.disposeObject(view.group);
         this.enemyViews.delete(id);
@@ -611,13 +622,12 @@ export class GameView {
     shieldBar.visible = maxShield > 0;
     bar.add(shieldBar);
 
-    bar.position.y = visual.barY;
     bar.visible = false;
-    visual.group.add(bar);
 
     return {
       group: visual.group,
       marker,
+      barHeight: visual.barY,
       baseScale: visual.baseScale,
       rotors: visual.rotors,
       shield: visual.shieldMesh,
