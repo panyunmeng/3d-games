@@ -1,0 +1,22 @@
+{
+  "name": "sokoban-3d",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "3D Sokoban (pixel-art look, three.js) — classic 2D rules with 3D rendering",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "levels": "node scripts/gen-levels.mjs"
+  },
+  "dependencies": {
+    "three": "^0.181.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.181.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.12"
+  }
+}

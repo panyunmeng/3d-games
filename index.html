@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23241a10'/%3E%3Crect x='3' y='3' width='10' height='10' fill='%23b8834a'/%3E%3Crect x='3' y='3' width='10' height='1' fill='%237d5222'/%3E%3Crect x='3' y='12' width='10' height='1' fill='%236d461b'/%3E%3Crect x='3' y='3' width='1' height='10' fill='%237d5222'/%3E%3Crect x='12' y='3' width='1' height='10' fill='%236d461b'/%3E%3Crect x='7' y='3' width='2' height='10' fill='%23a06f38'/%3E%3C/svg%3E"
+    />
+    <title>3D 推箱子 · Microban</title>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <header class="brand">
+          <h1>3D 推箱子</h1>
+          <p class="sub">Microban · 155 关</p>
+        </header>
+        <div id="level-list" class="level-list" role="listbox" aria-label="关卡列表"></div>
+        <footer class="credit">
+          关卡：David W. Skinner<br />
+          <span class="dim">规则：推箱 / 不可拉 / 全箱上点</span>
+        </footer>
+      </aside>
+
+      <main id="stage">
+        <canvas id="view"></canvas>
+
+        <div id="hud" class="hud">
+          <div class="hud-level">
+            <span id="hud-id" class="badge">#1</span>
+            <span id="hud-name" class="hud-name"></span>
+          </div>
+          <div class="hud-stats">
+            <span>步数 <b id="hud-moves">0</b></span>
+            <span>推动 <b id="hud-pushes">0</b></span>
+            <span>剩余 <b id="hud-left">0</b></span>
+          </div>
+          <div class="hud-actions">
+            <button id="btn-undo" type="button" title="撤销 (Z)">撤销</button>
+            <button id="btn-reset" type="button" title="重开 (R)">重开</button>
+            <button id="btn-prev" type="button" title="上一关 (,)">上一关</button>
+            <button id="btn-next" type="button" title="下一关 (.)">下一关</button>
+          </div>
+        </div>
+
+        <div id="hint" class="hint">
+          拖拽旋转 · 滚轮缩放 · 点地面走过去 · 点箱子推一下 · WASD / 方向键移动 · Z 撤销 · R 重开
+        </div>
+
+        <div id="win" class="win" hidden>
+          <div class="win-card">
+            <p class="win-title">过关</p>
+            <p class="win-line"><span id="win-id">#1</span> · <span id="win-moves">0</span> 步 · 推动 <span id="win-pushes">0</span></p>
+            <div class="win-actions">
+              <button id="win-retry" type="button">再玩一次</button>
+              <button id="win-next" type="button" class="primary">下一关</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
