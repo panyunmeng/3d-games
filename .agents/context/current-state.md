@@ -36,3 +36,9 @@
 3. 后台标签页 rAF 被节流到几 Hz，靠截图判断球速会得出「球走得太慢」的错误结论；
    物理验证必须走 `?selftest=1`。
 4. `build.py` 的 `</script` 检查不能套在 shell 模板自身（模板本来就有 script 标签），只查被注入的 JS。
+
+### 版本管理
+
+- 本地仓库：`git init` 于 2026-11-17，分支 `main`，首次提交 `4b82d0d`
+- 远端：http://panyunmeng.cn:3000/panyunmeng/3d-dazhuankuai （私有，默认分支 main；仓储名按 AlphaDashDot 转写）
+- 已建立跟踪：`main` → `origin/main`，本地与远端 SHA 一致
