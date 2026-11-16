@@ -43,8 +43,9 @@
 pnpm install
 pnpm dev        # 开发服务 http://127.0.0.1:5317
 pnpm typecheck  # tsc --noEmit
-pnpm build      # 类型检查 + 产出 dist/
-pnpm preview    # 预览 dist/（http://127.0.0.1:5318）
+pnpm build        # 类型检查 + 产出 dist/
+pnpm build:single # 额外产出 dist/standalone.html（单文件，双击即玩）
+pnpm preview      # 预览 dist/（http://127.0.0.1:5318）
 ```
 
 开发模式下有验收用的作弊键（仅 `import.meta.env.DEV` 生效，生产包不含）：
@@ -76,6 +77,9 @@ pnpm build
 ```
 
 已实测：把 `dist/` 放到子路径 `/game/` 下用静态服务器访问，页面、资源、存档全部正常。
+
+另外 `pnpm build:single` 会把 JS/CSS 内联成 **`dist/standalone.html` 单文件**（约 650 KB），
+不启服务、直接双击用 `file://` 打开也能玩——和这一系列其它 3D 小游戏同形态。
 
 ## 目录
 

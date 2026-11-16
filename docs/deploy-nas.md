@@ -6,6 +6,17 @@
 - 把 `dist/` 放在任意子路径（实测 `/game/`）下用静态服务器访问，页面、JS/CSS、localStorage 存档均正常。
 - 产物自包含：无 CDN、无外链字体、无外部图片，断网也能跑。
 
+## 0.5 另一种形态：单文件
+
+不想配静态服务时，用单文件版本：
+
+```bash
+pnpm build:single     # 产出 dist/standalone.html，约 650 KB
+```
+
+把它单独拷到 NAS 上任何位置，甚至本地双击，都能直接玩（file:// 下 localStorage 可能不可用，
+存档会静默跳过，不影响游戏）。
+
 ## 1. 构建
 
 ```bash

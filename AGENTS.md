@@ -18,6 +18,7 @@ Three.js + TypeScript + Vite 的科幻机甲塔防。全程序化美术（无外
 pnpm dev        # 本地开发服务 http://127.0.0.1:5317
 pnpm typecheck  # tsc --noEmit
 pnpm build      # 类型检查 + 产出 dist/
+pnpm build:single # 另出 dist/standalone.html 单文件（file:// 双击可玩）
 pnpm preview    # 预览 dist/
 pnpm tsx tools/balance.ts   # 无头平衡测试（三关 × 三难度）
 pnpm tsx tools/balance.ts 2 # 只跑第 2 关

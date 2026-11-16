@@ -65,6 +65,12 @@
   `Permission denied (publickey,password)`；NAS 主机密钥 2026-11-17 已变更（旧记录备份在
   `~/.ssh/known_hosts.bak-*`），需执行一次 `ssh-copy-id` 才能自动部署。
 
+### 2026-11-17 第四轮（自主推进）
+
+- 新增 `pnpm build:single`：把 JS/CSS 内联成 `dist/standalone.html`（约 650 KB），
+  **已用 file:// 实测双击可玩**（主菜单 → 选关 → 建塔均正常），与这系列其它 3D 小游戏同形态。
+  副作用：file:// 下 localStorage 可能不可用，存档静默降级，不影响玩。
+
 ### 待办 / 下一步
 
 - 二期：把 `dist/` 部署到 NAS（需要用户给静态目录与端口），可选加 HTTPS 反代。
