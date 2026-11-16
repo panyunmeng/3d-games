@@ -29,3 +29,8 @@
 - 触屏手势未做（本期需求只选了键盘 + 鼠标）。
 - 打包产物 542 kB（three 全量），未做 code split；本地玩无感。
 - 未做死局检测（箱子推进角落）提示。
+
+## 2026-11-17 版本管理
+
+- 本地仓库：`main`，首个提交 `d7910c8`（✨ 3D 推箱子初始化）。
+- 远端：http://panyunmeng.cn:3000/panyunmeng/3d-sokoban.git（私有，默认分支 main），已建立 `[origin/main]` 跟踪，`git ls-remote` SHA 与本地一致。

@@ -7,3 +7,4 @@ Thumbs.db
 .vite/
 *.log
 .agents/work/
+.commit-msg.tmp
