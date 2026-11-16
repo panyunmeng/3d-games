@@ -43,6 +43,45 @@
 - T-spin 只验了构造用例与判定函数，没有在真实对局里打出 T-spin double 的录像
 - 无最高分榜（只有本地单条最高分）
 
+## 2026-11-17 第二轮：把「未验证」逐条变成证据
+
+### 已完成
+
+- 新增 `src/framing.js`：取景几何抽成纯函数，窄屏是否裁掉井道不再靠肉眼，变成 5 条断言
+- 新增调试入口：`?scenario=tspin`（T-spin double 局面，冻结）、`?scenario=full`（154 块满盘）、
+  `?bench=N`（每帧 `gl.finish()` 的帧耗时基准）、`?soak=N`（同步虚拟时间浸泡）
+- 已固定方块改为 `InstancedMesh`：满盘 draw call 从约 160 降到 21
+- 修掉的真实缺陷：
+  1. 调试局面没冻结，500 ms 锁定延迟在截图前就把 T-spin 局面自己锁掉（加了 `scenarioHold`）
+  2. `?soak` 机器人只在贴地后硬降，等于干等重力，120 秒只落 2 块（改为定时强制硬降）
+  3. `?scenario=full&bench` 因启动分支顺序错误，测到的是空盘（先把场景建好再跑基准）
+  4. 重写浸泡时把 `runBench` 整段删掉，bench 分支静默失效（补回并复验）
+  5. `frame()` 里残留的实时浸泡统计已删除
+
+### 已验证（证据）
+
+- 单测 30/30：内核 25 + 取景 5（宽高比 0.4～3.0 均不裁切，且窄屏受宽度约束、宽屏受高度约束）
+- 帧耗时基准（满盘 154 块、21 次 draw call、95,330 三角面）：**0.26 ms/帧，等效 3778 fps**
+  —— 60 fps 有约 60 倍余量。截图：`.agents/work/visual/20261117-bench.png`
+- 浸泡 36,000 帧（600 秒虚拟时间）：40 次四连消、459 次落块、6 局、**0 错误、0 MB 堆增长**，
+  0.24 ms/帧。截图：`.agents/work/visual/20261117-soak.png`
+- T-spin double：`?scenario=tspin` 按 ↑ 后空格，**正好 1200 分**、消 2 行、「T-SPIN」提示可见。
+  截图：`.agents/work/visual/20261117-tspin.png`
+- 自检 6/6 复验通过。截图：`.agents/work/visual/20261117-selftest.png`
+- 浏览器自检与正常对局控制台均无 error
+
+### 重要的方法教训
+
+- 无窗口 Chromium 里标签页永远算「后台」，`requestAnimationFrame` 被节流到几 Hz。
+  我因此一度读到「满盘 100 fps」的假数据，并据此做了无用的 draw call 优化。
+  **性能只认 `gl.finish()` 基准**，这条已写进 `constraints/delivery.md`。
+
+### 待办 / 未验证
+
+- 仍未做触控（用户未选该需求，未擅自扩大范围）
+- 取景数学已被单测覆盖，但真机竖屏截图仍未做过
+- 没有背景音乐
+
 ## 版本管理
 
 - 本地仓库：`git init` + 首次提交 `1f520a5`（main）

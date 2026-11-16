@@ -27,6 +27,8 @@
   var showFps = params.get('fps') === '1';
   var autoN = Math.max(0, Math.min(200, Number(params.get('autoplay') || 0)));
   var scenario = params.get('scenario') || '';
+  var soakSec = Math.max(0, Math.min(600, Number(params.get('soak') || 0)));
+  var benchN = Math.max(0, Math.min(2000, Number(params.get('bench') || 0)));
   // demo / scenario 是调试盘面，里面的分数不是玩家打出来的，不能写进最高分
   var noBestSave = isDemo || scenario !== '';
   var seedParam = params.get('seed');
@@ -86,13 +88,10 @@
   }
 
   function fitCamera() {
-    var vFov = camera.fov * Math.PI / 180;
-    var tanV = Math.tan(vFov / 2);
-    var needH = ROWS + 3.4;
-    var needW = COLS + 4.2;
-    var distV = (needH / 2) / tanV;
-    var distH = (needW / 2) / (tanV * Math.max(camera.aspect, 0.01));
-    orbit.radius = Math.max(distV, distH) * 1.04;
+    // 取景数学在 src/framing.js 里，已被单测覆盖到 aspect 0.4～3.0
+    var f = window.Framing.computeFraming(COLS + 4.2, ROWS + 3.4, camera.fov, camera.aspect, 1.04);
+    orbit.radius = f.distance;
+    window.__framing = f;
   }
 
   // ---------------------------------------------------------------- 光照
@@ -180,17 +179,24 @@
     return matCache[type];
   }
 
-  var boardGroup = new THREE.Group();
-  scene.add(boardGroup);
-  var pool = [];
+  // 已固定的方块用 InstancedMesh：满盘约 160 块时把 draw call 从 160 压到 1。
+  // 实测这是满盘掉帧的唯一瓶颈（三角面数不变，只有 draw call 数在变）。
+  var boardInst = null;
+  var instColors = {};
+  Object.keys(PALETTE).forEach(function (k) { instColors[k] = new THREE.Color(PALETTE[k]); });
+  var _m4 = new THREE.Matrix4();
 
   function buildPool() {
-    for (var i = 0; i < COLS * ROWS; i++) {
-      var m = new THREE.Mesh(blockGeo, blockMat('T'));
-      m.visible = false;
-      boardGroup.add(m);
-      pool.push(m);
-    }
+    var mat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.4, metalness: 0.03,
+      emissive: 0x141414, emissiveIntensity: 1
+    });
+    boardInst = new THREE.InstancedMesh(blockGeo, mat, COLS * ROWS);
+    boardInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    boardInst.frustumCulled = false;
+    boardInst.count = 0;
+    for (var i = 0; i < COLS * ROWS; i++) boardInst.setColorAt(i, instColors.T);
+    scene.add(boardInst);
   }
 
   var activeGroup = new THREE.Group();
@@ -336,6 +342,12 @@
   var state = C.createState(SEED);
   var best = Number(localStorage.getItem(BEST_KEY) || 0) || 0;
   var lastShown = { score: -1, level: -1, lines: -1 };
+  // 调试局面冻结：不让锁定延迟在玩家出手前把局面自己走掉
+  var scenarioHold = false;
+  // 只保留计数器：浸泡跑法是同步的，不需要 active/botTimer 这类实时状态
+  var soak = { errors: 0, games: 0, clears: 0, tspins: 0, locks: 0 };
+  window.addEventListener('error', function () { soak.errors += 1; });
+  window.addEventListener('unhandledrejection', function () { soak.errors += 1; });
   var toastTimer = 0;
   var shakeTime = 0;
 
@@ -467,18 +479,20 @@
 
   // ---------------------------------------------------------------- 视图同步
   function refreshBoardView() {
-    var i = 0;
+    var n = 0;
     for (var y = 0; y < ROWS; y++) {
       for (var x = 0; x < COLS; x++) {
         var v = state.board[y * COLS + x];
         if (!v) continue;
-        var mesh = pool[i++];
-        mesh.visible = true;
-        mesh.position.set(x + 0.5, y + 0.5, 0);
-        mesh.material = blockMat(typeOfId(v));
+        _m4.makeTranslation(x + 0.5, y + 0.5, 0);
+        boardInst.setMatrixAt(n, _m4);
+        boardInst.setColorAt(n, instColors[typeOfId(v)]);
+        n += 1;
       }
     }
-    for (; i < pool.length; i++) pool[i].visible = false;
+    boardInst.count = n;
+    boardInst.instanceMatrix.needsUpdate = true;
+    if (boardInst.instanceColor) boardInst.instanceColor.needsUpdate = true;
   }
 
   var ID2TYPE = {};
@@ -528,9 +542,12 @@
 
   function handleEvent(ev) {
     if (ev.type === 'lock') {
+      soak.locks += 1;
       refreshBoardView();
       Sound.lock();
       if (ev.cleared > 0) {
+        soak.clears += 1;
+        if (ev.tspin) soak.tspins += 1;
         for (var r = 0; r < ev.rows.length; r++) spawnFlash(ev.rows[r]);
         Sound.clear(ev.cleared);
         if (ev.cleared >= 4) shakeTime = 0.28;
@@ -716,6 +733,7 @@
       if (code === 'Space' || code === 'Enter' || code === 'KeyR') restart();
       return;
     }
+    scenarioHold = false;
     if (code === 'KeyM') { setMuted(Sound.toggle()); return; }
     if (code === 'KeyP' || code === 'Escape') { togglePause(); return; }
     if (code === 'KeyR') { restart(); return; }
@@ -815,7 +833,7 @@
   function update(dtSec, dtMs) {
     if (state.status === 'playing') {
       // DAS：按下先走一格，按住 delay 后每 repeat 走一格
-      if (held.left || held.right) {
+      if (!scenarioHold && (held.left || held.right)) {
         das.timer += dtMs;
         var guard = 0;
         while (das.timer >= das.nextAt && guard++ < 8) {
@@ -824,7 +842,7 @@
           if (das.nextAt <= das.timer) das.nextAt = das.timer + das.repeat;
         }
       }
-      C.tick(state, dtMs);
+      if (!scenarioHold) C.tick(state, dtMs);
       drainEvents();
       refreshActiveView();
       syncHud();
@@ -955,6 +973,58 @@
     syncHud(true);
   }
 
+  // 与 node 里验证过的局面完全一致：T 以 rot1 站在槽里，
+  // 顺时针转进 rot2 后四角被占 → T-spin double。期望 +1200 分、消 2 行。
+  function buildTSpinScenario() {
+    state.board = new Uint8Array(COLS * ROWS);
+    var put = function (x, y, t) { state.board[y * COLS + x] = C.PIECE_ID[t]; };
+    for (var x = 0; x < COLS; x++) {
+      if (x !== 4) put(x, 0, 'J');
+      if (x < 3 || x > 5) put(x, 1, 'L');
+    }
+    put(3, 2, 'S'); put(5, 2, 'Z'); // 悬挑，制造四角被占
+    state.active = { type: 'T', rot: 1, x: 3, y: 0 };
+    state.status = 'playing';
+    state.score = 0;
+    state.lines = 0;
+    state.level = 1;
+    state.queue = ['I', 'O', 'S'];
+    state.hold = null;
+    state.events.length = 0;
+    scenarioHold = true;
+    refreshBoardView();
+    refreshActiveView();
+    drawNext();
+    drawHold();
+    syncHud(true);
+  }
+
+  // 接近满盘（约 160 块），用于压测渲染最坏情况
+  function buildFullBoardScenario() {
+    state.board = new Uint8Array(COLS * ROWS);
+    var types = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+    for (var y = 0; y < 17; y++) {
+      for (var x = 0; x < COLS; x++) {
+        if ((x * 7 + y * 3) % 11 === 0) continue; // 留洞，避免整行待消
+        state.board[y * COLS + x] = C.PIECE_ID[types[(x * 3 + y) % 7]];
+      }
+    }
+    state.active = { type: 'T', rot: 0, x: 4, y: 17 };
+    state.status = 'playing';
+    state.score = 0;
+    state.lines = 0;
+    state.level = 1;
+    state.queue = ['I', 'O', 'S'];
+    state.hold = null;
+    state.events.length = 0;
+    scenarioHold = true; // 静态压测：保持块数不变，只测渲染开销
+    refreshBoardView();
+    refreshActiveView();
+    drawNext();
+    drawHold();
+    syncHud(true);
+  }
+
   function buildTetrisScenario() {
     state.board = new Uint8Array(COLS * ROWS);
     for (var y = 0; y < 4; y++) {
@@ -975,6 +1045,142 @@
     drawNext();
     drawHold();
     syncHud(true);
+  }
+
+  // 帧耗时基准：连续渲染 N 帧并每帧 gl.finish() 等 GPU 完成。
+  // 不走 rAF，所以不受「标签页在后台被节流」影响，数字才可信。
+  function runBench(frames) {
+    var gl = renderer.getContext();
+    for (var w = 0; w < 12; w++) renderer.render(scene, camera); // 预热，编译着色器
+    gl.finish();
+    var t0 = performance.now();
+    for (var i = 0; i < frames; i++) {
+      update(1 / 60, 1000 / 60);
+      renderer.render(scene, camera);
+      gl.finish();
+    }
+    var total = performance.now() - t0;
+    var per = total / frames;
+    var blocks = 0;
+    for (var b = 0; b < state.board.length; b++) if (state.board[b]) blocks += 1;
+    var info = renderer.info.render;
+    var res = {
+      frames: frames,
+      msPerFrame: Number(per.toFixed(2)),
+      fpsEquivalent: Number((1000 / per).toFixed(1)),
+      drawCalls: info.calls,
+      triangles: info.triangles,
+      blocks: blocks
+    };
+    window.__bench = res;
+    if (console.table) console.table(res);
+    el.overlay.classList.add('on');
+    el.dialog.innerHTML =
+      '<h1 style="font-size:22px">帧耗时基准</h1>' +
+      '<div class="big">' + res.msPerFrame + ' ms/帧</div>' +
+      '<p>等效 ' + res.fpsEquivalent + ' fps · 已固定方块 ' + res.blocks + ' 块</p>' +
+      '<div class="keys">' +
+      '<span>draw call <b>' + res.drawCalls + '</b></span>' +
+      '<span>三角面 <b>' + res.triangles.toLocaleString('en-US') + '</b></span>' +
+      '<span>采样帧数 <b>' + res.frames + '</b></span>' +
+      '<span>总耗时 <b>' + total.toFixed(0) + ' ms</b></span>' +
+      '</div>';
+    overlayMode = 'start';
+    return res;
+  }
+
+  // 浸泡测试：固定步长同步推进，不依赖 rAF 与标签页可见性。
+  // 无窗口的 Chromium 里标签页永远算后台，实时计时测到的帧率是假的；
+  // 同步跑 N 秒虚拟时间反而更狠——几万帧连续调用 update/render，泄漏与状态错乱都会暴露。
+  function runSoak(simSeconds) {
+    var dtMs = 1000 / 60;
+    var frames = Math.round(simSeconds * 1000 / dtMs);
+    var heapOK = !!(performance.memory && performance.memory.usedJSHeapSize);
+    var heapBefore = heapOK ? performance.memory.usedJSHeapSize : 0;
+    var clearBefore = soak.clears;
+    var tspinBefore = soak.tspins;
+    var errorsBefore = soak.errors;
+    var lockBefore = soak.locks;
+    var worst = 0;
+    var thrown = null;
+    var t0 = performance.now();
+
+    for (var i = 0; i < frames; i++) {
+      if (state.status === 'over') {
+        soak.games += 1;
+        restart();
+      }
+      // 每 900 帧注入一次「四连消」局面：专门反复压测消行路径
+      //（闪光 mesh 的创建与 dispose、提示、计分），这是最容易漏内存的地方。
+      if (i > 0 && i % 900 === 450) {
+        state.board = new Uint8Array(COLS * ROWS);
+        for (var iy = 0; iy < 4; iy++) {
+          for (var ix = 0; ix < COLS; ix++) {
+            if (ix !== 5) state.board[iy * COLS + ix] = C.PIECE_ID[ix % 2 ? 'T' : 'L'];
+          }
+        }
+        state.active = { type: 'I', rot: 1, x: 3, y: 8 };
+        state.status = 'playing';
+        C.hardDrop(state);
+      }
+      // 随机铺开，避免只堆中柱
+      if (state.active && (i % 90 === 0 || C.isGrounded(state))) {
+        var want = Math.floor(Math.random() * 7) - 3;
+        for (var m = 0; m < Math.abs(want); m++) C.tryMove(state, want > 0 ? 1 : -1, 0);
+        if (Math.random() < 0.6) C.tryRotate(state, 1);
+        C.hardDrop(state);
+      }
+      try {
+        var f0 = performance.now();
+        update(dtMs / 1000, dtMs);
+        renderer.render(scene, camera);
+        var spent = performance.now() - f0;
+        if (spent > worst) worst = spent;
+      } catch (e) {
+        thrown = e;
+        soak.errors += 1;
+        break;
+      }
+    }
+    renderer.getContext().finish();
+    var wall = performance.now() - t0;
+    var heapAfter = heapOK ? performance.memory.usedJSHeapSize : 0;
+    var heapDelta = (heapOK && heapBefore) ? ((heapAfter - heapBefore) / 1048576) : 0;
+
+    var res = {
+      simSeconds: simSeconds,
+      frames: frames,
+      wallMs: Number(wall.toFixed(0)),
+      msPerFrame: Number((wall / frames).toFixed(2)),
+      games: soak.games,
+      clears: soak.clears - clearBefore,
+      tspins: soak.tspins - tspinBefore,
+      errors: soak.errors - errorsBefore,
+      heapDeltaMB: heapOK ? Number(heapDelta.toFixed(1)) : null,
+      locks: soak.locks - lockBefore,
+      worstFrameMs: Number(worst.toFixed(1)),
+      thrown: thrown ? String(thrown && thrown.message) : null
+    };
+    window.__soak = res;
+    if (console.table) console.table(res);
+
+    el.overlay.classList.add('on');
+    el.dialog.innerHTML =
+      '<h1 style="font-size:22px">浸泡测试</h1>' +
+      '<div class="big">' + res.frames.toLocaleString('en-US') + ' 帧</div>' +
+      '<p>相当于连续游戏 ' + res.simSeconds + ' 秒 · 实际耗时 ' + res.wallMs + ' ms · ' +
+      res.msPerFrame + ' ms/帧</p>' +
+      '<div class="keys">' +
+      '<span>完成对局 <b>' + res.games + '</b></span>' +
+      '<span>消行次数 <b>' + res.clears + '</b></span>' +
+      '<span>T-spin <b>' + res.tspins + '</b></span>' +
+      '<span>运行错误 <b>' + res.errors + '</b></span>' +
+      '<span>堆增长 <b>' + (res.heapDeltaMB === null ? 'n/a' : res.heapDeltaMB + ' MB') + '</b></span>' +
+      '<span>累计落块 <b>' + res.locks + '</b></span>' +
+      '</div>' +
+      (res.thrown ? '<p style="color:#ff7a94">异常：' + res.thrown + '</p>' : '');
+    overlayMode = 'start';
+    return res;
   }
 
   function buildDemoBoard() {
@@ -1031,7 +1237,21 @@
     syncHud(true);
     rafId = requestAnimationFrame(frame);
 
-    if (autoN > 0) {
+    // 启动顺序很重要：先摆好场景（若有），再让压在场景上的测试模式接管。
+    // 之前把 bench 分支放在场景分支前面，导致 ?scenario=full&bench=300 测到的是空盘。
+    var scenarioBuilt = false;
+    if (scenario === 'tetris') { hideOverlay(); buildTetrisScenario(); scenarioBuilt = true; }
+    else if (scenario === 'tspin') { hideOverlay(); buildTSpinScenario(); scenarioBuilt = true; }
+    else if (scenario === 'full') { hideOverlay(); buildFullBoardScenario(); scenarioBuilt = true; }
+    else if (isDemo) { hideOverlay(); buildDemoBoard(); scenarioBuilt = true; }
+
+    if (isSelfTest) {
+      setTimeout(runSelfTest, 60);
+    } else if (soakSec > 0) {
+      hideOverlay();
+      startGame();
+      setTimeout(function () { runSoak(soakSec); }, 120);
+    } else if (autoN > 0) {
       hideOverlay();
       startGame();
       // 固定往左堆，保证在有限块数内顶到出生点，从而真正走完一局
@@ -1045,15 +1265,10 @@
       drawNext();
       drawHold();
       syncHud(true);
-    } else if (isDemo) {
+    } else if (benchN > 0) {
       hideOverlay();
-      buildDemoBoard();
-    } else if (scenario === 'tetris') {
-      hideOverlay();
-      buildTetrisScenario();
-    } else if (isSelfTest) {
-      setTimeout(runSelfTest, 60);
-    } else {
+      setTimeout(function () { runBench(benchN); }, 200);
+    } else if (!scenarioBuilt) {
       showStart();
     }
 

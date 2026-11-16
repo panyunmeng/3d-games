@@ -17,6 +17,7 @@ OUT = ROOT / "index.html"
 PARTS = [
     ("/*__THREE_JS__*/", ROOT / "vendor" / "three.min.js"),
     ("/*__ROUNDED_JS__*/", ROOT / "vendor" / "RoundedBoxGeometry.js"),
+    ("/*__FRAMING_JS__*/", ROOT / "src" / "framing.js"),
     ("/*__CORE_JS__*/", ROOT / "src" / "core.js"),
     ("/*__GAME_JS__*/", ROOT / "src" / "game.js"),
 ]
