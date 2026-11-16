@@ -1,0 +1,11 @@
+{
+  "name": "tetris-3d",
+  "version": "1.0.0",
+  "private": true,
+  "description": "3D 俄罗斯方块 · 经典 10×20 判定 + 立体糖果积木渲染（Three.js，纯前端，零构建）",
+  "scripts": {
+    "build": "python build.py",
+    "test": "node --test tests/core.test.js",
+    "check": "node --check src/core.js && node --check src/game.js && node --test tests/core.test.js"
+  }
+}
