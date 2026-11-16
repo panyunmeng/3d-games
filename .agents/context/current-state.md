@@ -20,3 +20,9 @@
 - 触屏虚拟摇杆（当前只支持拖拽转视角）。
 - 关卡通过/结算的端到端可视化回归（逻辑层已被模拟器覆盖，UI 仅人工验过）。
 - 音效只在 Chromium 手测，未做多浏览器核对。
+
+## 版本管理
+
+- 本地仓库：`main`，首次提交 `0349bd3`（✨ 3D 贪吃蛇首版可玩）
+- 远端：http://panyunmeng.cn:3000/panyunmeng/3d-jingdian-tanchishe （私有，默认分支 main，已建跟踪）
+- 仓库名按 Gitea 的 AlphaDashDot 规则转写为 `3d-jingdian-tanchishe`，中文原名写在仓库描述里
