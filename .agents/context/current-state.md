@@ -90,3 +90,43 @@ NAS 上线后：
   完整走一遍（5667 需要 fnOS 会话 Cookie）
 - `3D坦克大战` 的 `pnpm-lock.yaml` 是本轮 `pnpm install` 新生成的，
   在它自己仓库里还是未跟踪文件，未提交
+
+## 2026-11-17 · 收尾
+
+### 版本管理
+
+- 本地仓库：`main`，首次提交 `9dcbab2`（🎮 7 个 3D 小游戏聚合成一个 fnOS 应用）
+- 远端：`http://panyunmeng.cn:3000/panyunmeng/3d-game-collection.git`（私有）
+- 本地与远端 SHA 一致：`9dcbab2a5555f7136f0e182ade49c8b9e6c1c0e3`
+- `.gitignore` 排除 7 个游戏目录（各有独立仓库）、`build/`、`node_modules/`
+
+### 最终线上状态（复核过）
+
+| 项 | 值 |
+| --- | --- |
+| 应用 | `3d-games` 1.0.0，状态 `running` |
+| 端口 | `0.0.0.0:8081` 监听中 |
+| 网关 socket | `/var/apps/3d-games/target/app.sock`（属主 `3dgames`） |
+| 进程 | 1 个 `server/index.mjs` |
+| 日志 | `/var/apps/3d-games/var/app.log` |
+
+### 复验记录
+
+- 从干净状态重跑 `build.mjs` + `pack.mjs`：7/7 成功，6143 KB
+- 线上 7 个游戏逐个真开：全部 PASS，零报错
+- 门户页：7 张卡片、7 张封面、前缀注入 `/app/3d-games` 正确
+- 网关未登录时返回 `invalid token`（登录门禁生效，属预期行为）
+- 坦克联机日志显示多局 `开始对战（p1 p1 p2 p2）`
+
+### 遗留事项（明确未做）
+
+1. **手机真机未验**：门户与 7 个游戏只有桌面 1440×900 实测证据。
+   窄屏是 CSS 自适应，`verify-live.mjs` 可以用 `Emulation.setDeviceMetricsOverride`
+   改成手机尺寸复跑，但没做。
+2. **网关 HTTPS 只验到「返回 200」**：没有在浏览器里带 fnOS 会话 Cookie
+   完整走一遍 `/app/3d-games` 的页面加载。原因是没有现成的登录态可用。
+   端口路径是同一条代码路径（前缀剥离逻辑已被 5666 的 200 验证），
+   风险低，但不算已验。
+3. **`3D坦克大战/pnpm-lock.yaml`**：本轮 `pnpm install` 重新生成，在它自己
+   仓库里仍是未跟踪文件，未提交。它那边的 lockfile 本来就不入库
+   （`.gitignore` 未含），下次去那个仓库时决定。
