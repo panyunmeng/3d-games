@@ -398,6 +398,19 @@ export class Game {
         this.toggleMute();
         return;
       }
+      // 规范 §二：P 与 Esc 都能暂停 / 继续
+      if (ev.code === 'KeyP') {
+        this.onEscape();
+        return;
+      }
+      // 规范 §二：R 重开本局（联机局不重开——那会打断队友）
+      if (ev.code === 'KeyR') {
+        if (this.mode === 'playing') {
+          ev.preventDefault();
+          this.restartLevel();
+        }
+        return;
+      }
       if (ev.code === 'Space' || ev.code.startsWith('Arrow')) ev.preventDefault();
     });
     window.addEventListener('keyup', (ev) => {
@@ -779,7 +792,7 @@ export class Game {
       onClosed: () => {
         if (this.mode === 'netPlaying' || this.mode === 'lobby') {
           this.ui.setHudVisible(false);
-          this.ui.showNetStatus('连接已断开', '队友离开或服务器关闭，可返回主菜单重新开始。');
+          this.ui.showNetStatus('连接已断开', '队友离开或服务器关闭，可返回主菜单再开一局。');
           this.mode = 'lobby';
         }
       },

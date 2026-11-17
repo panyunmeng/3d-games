@@ -264,7 +264,7 @@ export class Ui {
         <p class="subtitle">按 Esc 或点击「继续」回到战场</p>
         <div class="actions">
           <button class="btn primary" data-act="resume">继续</button>
-          <button class="btn" data-act="restart">重新开始本关</button>
+          <button class="btn" data-act="restart">重开本关</button>
           <button class="btn ghost" data-act="quit">返回主菜单</button>
         </div>
       </div>
