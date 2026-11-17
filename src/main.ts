@@ -359,16 +359,21 @@ class Game implements UiBridge {
       const tag = (document.activeElement?.tagName ?? '').toLowerCase();
       if (tag === 'input' || tag === 'textarea') return;
 
-      if (ev.code === 'Escape') {
+      // 暂停 / 继续：Esc 与 P 都接受（设计语言规范 §二）。
+      // 设置页里 Esc 先关设置页，不抢暂停。
+      if (ev.code === 'Escape' || ev.code === 'KeyP') {
         if (this.state === 'settings') {
           this.closeSettings();
           return;
         }
-        if (this.ui.isPaused) {
+        if (this.state === 'paused') {
           this.resume();
           return;
         }
-        if (this.state === 'playing') this.deselect();
+        if (this.state === 'playing') {
+          ev.preventDefault();
+          this.togglePause();
+        }
         return;
       }
       if (ev.code === 'Space') {
@@ -396,6 +401,10 @@ class Game implements UiBridge {
           this.upgradeSelected();
           break;
         case 'KeyR':
+          // 规范 §二：R 一律重开本局。相机复位挪到 Home，避免与重开冲突
+          this.restart();
+          break;
+        case 'Home':
           this.view.resetCamera();
           break;
         case 'KeyX':

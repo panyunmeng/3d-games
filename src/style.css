@@ -1,5 +1,5 @@
 :root {
-  --bg: #05070c;
+  --bg: #0a0d16;
   --panel: rgba(9, 14, 21, 0.88);
   --panel-2: rgba(14, 21, 31, 0.92);
   --line: rgba(120, 190, 255, 0.18);
@@ -8,9 +8,9 @@
   --gold: #ffc247;
   --danger: #ff4d6d;
   --ok: #54ff8f;
-  --text: #dceaf8;
+  --text: #e8edf7;
   --muted: #8398ae;
-  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 }
 
 * {
