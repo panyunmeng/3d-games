@@ -318,6 +318,22 @@
     card.className = 'card';
     card.href = href(g.path);
     card.style.setProperty('--accent', g.accent || '#7aa2ff');
+    /**
+     * 新标签页打开游戏，而不是在本页跳转。
+     *
+     * 为什么：门户页在 fnOS 桌面里是 iframe 承载的，本页跳转会把游戏塞进
+     * 同一个 iframe，玩家第一屏就是游戏全屏，没有任何回门户的入口——
+     * 只能关窗口重进。新标签页让游戏独占一个页面，平台页留在原处随时可回。
+     *
+     * 顺带解决两件事：游戏能真正全屏（不受 iframe 尺寸限制）；指针锁定、
+     * 键盘事件不会和宿主页面互相干扰（坦克用 pointer lock，在 iframe 里
+     * 容易失效）。
+     *
+     * 用 target 而不是 JS 拦 click：中键、Ctrl+点击、右键"新标签页打开"
+     * 这些浏览器原生行为都会照常工作。
+     */
+    card.target = '_blank';
+    card.rel = 'noopener';
 
     const shot = el('div', 'shot');
     const img = document.createElement('img');

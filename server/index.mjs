@@ -95,14 +95,119 @@ function resolveAsset(inner) {
   return resolved;
 }
 
-async function sendFile(res, file, { immutable = false } = {}) {
-  const data = await fs.readFile(file);
+async function sendFile(res, file, { immutable = false, inject = null } = {}) {
+  let data = await fs.readFile(file);
+  const ext = path.extname(file).toLowerCase();
+
+  // 注入只对游戏首页的 HTML 生效。改了内容就必须重算长度，
+  // 否则 content-length 与实体不符，浏览器会截断或挂起。
+  if (inject && ext === '.html') {
+    data = Buffer.from(inject(data.toString('utf8')), 'utf8');
+  }
+
   res.writeHead(200, {
-    'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
+    'content-type': MIME[ext] ?? 'application/octet-stream',
     'content-length': data.length,
     'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
   });
   res.end(data);
+}
+
+/**
+ * 给游戏页注入一个「返回平台」浮层。
+ *
+ * 为什么放在服务端注入而不是改各游戏源码：7 个游戏是独立仓库，往每个
+ * 游戏里塞一段平台专用的 UI 会污染它们（单机部署时那段按钮毫无意义，
+ * 还得各自维护）。注入发生在响应阶段，游戏文件保持原样，产物也不需要重建。
+ *
+ * 为什么还需要它（门户已经改成新标签页了）：
+ *   1. 有人直接输网址 / 从收藏夹进游戏，绕过了门户
+ *   2. fnOS 里同一 iframe 重开页面时，历史里没有门户
+ *   3. 关掉标签页再回来，不如页内一键返回顺手
+ *
+ * 设计约束：
+ *   - 只注入一次（已有 data-platform-back 就不再加）
+ *   - z-index 取很高，避免被游戏的 HUD 盖住
+ *   - pointer-events 只给按钮本身，不挡游戏画面
+ *   - 与游戏样式完全不共享，用内联 style 和 !important 防止被覆盖
+ */
+function backOverlay(prefix) {
+  const home = `${prefix || ''}/`;
+  return `
+<script data-platform-back>
+(function () {
+  if (window.__PLATFORM_BACK__) return;
+  window.__PLATFORM_BACK__ = 1;
+  var HOME = ${JSON.stringify(home)};
+  function mount() {
+    if (document.querySelector('[data-platform-back-btn]')) return;
+    var a = document.createElement('a');
+    a.setAttribute('data-platform-back-btn', '');
+    a.href = HOME;
+    a.textContent = '\\u2190 \\u8fd4\\u56de\\u5e73\\u53f0';
+    a.setAttribute('aria-label', '\\u8fd4\\u56de 3D \\u6e38\\u620f\\u5e73\\u53f0');
+    a.style.cssText = [
+      'position:fixed !important',
+      'right:calc(12px + env(safe-area-inset-right, 0px)) !important',
+      'bottom:calc(12px + env(safe-area-inset-bottom, 0px)) !important',
+      'z-index:2147483646 !important',
+      'display:inline-flex !important',
+      'align-items:center !important',
+      'gap:6px !important',
+      'padding:7px 13px !important',
+      'border-radius:999px !important',
+      'background:rgba(12,16,26,.82) !important',
+      'color:#e8ecf6 !important',
+      'border:1px solid rgba(255,255,255,.16) !important',
+      'font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif !important',
+      'text-decoration:none !important',
+      'letter-spacing:.02em !important',
+      'backdrop-filter:blur(8px) !important',
+      '-webkit-backdrop-filter:blur(8px) !important',
+      'box-shadow:0 4px 16px -6px rgba(0,0,0,.6) !important',
+      'opacity:.55 !important',
+      'transition:opacity .18s ease,transform .18s ease !important',
+      'cursor:pointer !important',
+      'pointer-events:auto !important',
+      'user-select:none !important'
+    ].join(';');
+    // 默认半透明，不抢游戏画面；悬停才完全显形
+    a.addEventListener('mouseenter', function () {
+      a.style.setProperty('opacity', '1', 'important');
+      a.style.setProperty('transform', 'translateX(-2px)', 'important');
+    });
+    a.addEventListener('mouseleave', function () {
+      a.style.setProperty('opacity', '.55', 'important');
+      a.style.setProperty('transform', 'none', 'important');
+    });
+    // 触屏没有 hover，按下时短暂显形
+    a.addEventListener('touchstart', function () {
+      a.style.setProperty('opacity', '1', 'important');
+    }, { passive: true });
+    a.addEventListener('touchend', function () {
+      a.style.setProperty('opacity', '.55', 'important');
+    }, { passive: true });
+
+    // 挂到 body 最后，确保在游戏所有节点之后（同 z-index 时后来者在上）
+    (document.body || document.documentElement).appendChild(a);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();
+</script>
+`;
+}
+
+/** 在 </body> 前插入；没有 body 标签就追加到末尾。只对游戏首页调用。 */
+function withBackButton(html, prefix) {
+  if (html.includes('data-platform-back')) return html;
+  const tag = backOverlay(prefix);
+  const idx = html.lastIndexOf('</body>');
+  if (idx === -1) return html + tag;
+  return html.slice(0, idx) + tag + html.slice(idx);
 }
 
 function sendText(res, code, text) {
@@ -184,7 +289,24 @@ async function handle(req, res) {
   try {
     const info = await fs.stat(file);
     if (!info.isFile()) throw new Error('not a file');
-    await sendFile(res, file, { immutable: inner.startsWith('/games/') && inner.includes('/assets/') });
+    /**
+     * 只给「游戏首页」注入返回按钮。
+     *
+     * 判据用解析后的真实文件名，不用 inner：inner 是请求路径，可能是
+     * /games/tank/（目录形式，basename 为空），也可能是 /games/tank/index.html。
+     * resolveAsset 已经把前者归一成 .../index.html，所以看 file 才准。
+     *
+     * 三个条件缺一不可：
+     *   路径在 /games/ 下   —— 别把门户页或别的 HTML 也改了
+     *   文件名是 index.html —— 游戏内二级 HTML（如果有）不加，避免到处浮按钮
+     *   扩展名是 .html     —— 资源文件一律不动
+     */
+    const isGameEntry =
+      inner.startsWith('/games/') && path.basename(file) === 'index.html';
+    await sendFile(res, file, {
+      immutable: inner.startsWith('/games/') && inner.includes('/assets/'),
+      inject: isGameEntry ? (html) => withBackButton(html, GATEWAY_PREFIX) : null,
+    });
   } catch {
     // 目录省略结尾斜杠时补一次重定向，其余按 404 处理（不做 SPA 回退：
     // 每个游戏都是独立的多页产物，回退到门户反而会把错误藏起来）
