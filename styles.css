@@ -188,7 +188,7 @@ html, body {
   position: relative;
   width: min(760px, 100%);
   padding: 44px 46px 40px;
-  border-radius: 26px;
+  border-radius: 18px;
   border: 1px solid rgba(200, 134, 60, 0.2);
   background: linear-gradient(165deg, rgba(38, 29, 21, 0.84), rgba(14, 11, 8, 0.92));
   backdrop-filter: blur(10px);
@@ -246,7 +246,7 @@ h1 {
   flex-direction: column;
   gap: 7px;
   padding: 18px 18px 16px;
-  border-radius: 16px;
+  border-radius: 18px;
   border: 1px solid rgba(200, 134, 60, 0.22);
   background: linear-gradient(160deg, rgba(58, 44, 31, 0.5), rgba(18, 13, 9, 0.75));
   color: var(--text);
@@ -358,7 +358,7 @@ h1 {
   flex-direction: column;
   gap: 6px;
   padding: 14px 10px;
-  border-radius: 14px;
+  border-radius: 18px;
   border: 1px solid rgba(200, 134, 60, 0.14);
   background: rgba(0, 0, 0, 0.22);
 }
