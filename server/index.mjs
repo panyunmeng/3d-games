@@ -201,13 +201,50 @@ function backOverlay(prefix) {
 `;
 }
 
-/** 在 </body> 前插入；没有 body 标签就追加到末尾。只对游戏首页调用。 */
-function withBackButton(html, prefix) {
-  if (html.includes('data-platform-back')) return html;
-  const tag = backOverlay(prefix);
-  const idx = html.lastIndexOf('</body>');
-  if (idx === -1) return html + tag;
-  return html.slice(0, idx) + tag + html.slice(idx);
+/**
+ * 给游戏页注入统一设计令牌（CSS 变量）与返回按钮。
+ *
+ * 为什么注入令牌而不改 7 个游戏的 CSS：令牌是「所有游戏共用同一组变量名」，
+ * 注入后游戏里所有 `var(--text)`、`var(--radius)` 立刻取到统一值，
+ * 不用动它们任何一个仓库。游戏自己声明的 `--accent` 会覆盖注入值，
+ * 所以每个游戏的强调色仍然是它自己的——这正是规范要的：
+ * 骨架统一、个性保留。
+ *
+ * 顺序很重要：令牌的 <link> 必须在游戏自己的 <style> <link> **之前**，
+ * 这样游戏原有样式仍在后面、优先权更高，不会被令牌意外盖掉。
+ */
+function withDesign(html, prefix) {
+  let out = html;
+
+  // 1. 令牌进 <head>：必须在游戏自己的样式之前，游戏原有样式仍然优先
+  if (!out.includes('data-platform-design')) {
+    const href = `${prefix || ''}/design-tokens.css`;
+    const linkTag = `<link rel="stylesheet" data-platform-design href="${href}">`;
+    /**
+     * 插在 <head> 之后，而不是 </head> 之前。
+     *
+     * 位置决定优先级：游戏自己的 <link rel=stylesheet> 在 head 里，
+     * 令牌若排在它们后面、且选择器权重相同，就会反过来盖掉游戏的样式。
+     * 放在最前，游戏原有样式仍在后面 → 游戏优先，令牌只提供「游戏没写」
+     * 的那些变量与通用类。这正是规范要的层次：令牌兜底，游戏定调。
+     */
+    const headOpen = out.indexOf('<head');
+    if (headOpen === -1) {
+      out = linkTag + out;
+    } else {
+      const headClose = out.indexOf('>', headOpen);
+      out = out.slice(0, headClose + 1) + linkTag + out.slice(headClose + 1);
+    }
+  }
+
+  // 2. 返回按钮进 </body> 前
+  if (!out.includes('data-platform-back')) {
+    const tag = backOverlay(prefix);
+    const idx = out.lastIndexOf('</body>');
+    out = idx === -1 ? out + tag : out.slice(0, idx) + tag + out.slice(idx);
+  }
+
+  return out;
 }
 
 function sendText(res, code, text) {
@@ -262,6 +299,28 @@ async function handle(req, res) {
     return;
   }
 
+  /**
+   * 设计令牌：游戏页会被注入指向这里的 <link>。
+   *
+   * 走服务端而不是让每份产物各带一份，好处是改令牌只改这一个文件，
+   * 7 个游戏立刻生效、不用重建产物。构建时它会被拷进 build/www。
+   */
+  if (inner === '/design-tokens.css') {
+    try {
+      const css = await fs.readFile(path.join(ROOT, 'design-tokens.css'));
+      res.writeHead(200, {
+        'content-type': 'text/css; charset=utf-8',
+        'content-length': css.length,
+        // 令牌会随设计规范演进，但不必每次都回源：给个短缓存折中
+        'cache-control': 'public, max-age=300',
+      });
+      res.end(css);
+    } catch {
+      sendText(res, 404, 'design-tokens.css 缺失');
+    }
+    return;
+  }
+
   // 门户页需要知道自己在哪个前缀下，才能把「进入游戏」的链接拼对。
   // 注入成一个只读的全局量，避免前端再猜一次路径。
   if (inner === '/' || inner === '/index.html') {
@@ -305,7 +364,7 @@ async function handle(req, res) {
       inner.startsWith('/games/') && path.basename(file) === 'index.html';
     await sendFile(res, file, {
       immutable: inner.startsWith('/games/') && inner.includes('/assets/'),
-      inject: isGameEntry ? (html) => withBackButton(html, GATEWAY_PREFIX) : null,
+      inject: isGameEntry ? (html) => withDesign(html, GATEWAY_PREFIX) : null,
     });
   } catch {
     // 目录省略结尾斜杠时补一次重定向，其余按 404 处理（不做 SPA 回退：

@@ -6,16 +6,13 @@
 <title>3D 游戏合集</title>
 <meta name="description" content="七个纯前端 3D 小游戏：贪吃蛇、俄罗斯方块、打砖块、扫雷、推箱子、塔防、坦克大战。" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131826'/%3E%3Cpath d='M9 20.5 16 9l7 11.5z' fill='none' stroke='%236cf0a8' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='17' r='1.8' fill='%237aa2ff'/%3E%3C/svg%3E" />
+<!-- 设计令牌：门户是这套规范的基准样板，值只在 design-tokens.css 里定义一次 -->
+<link rel="stylesheet" href="./design-tokens.css">
 <style>
+  /* 门户自己独有的层次色（令牌里没有对应语义，留在本地） */
   :root {
-    --bg: #0b0e17;
     --bg-soft: #121728;
     --card: #161c2e;
-    --line: #232b42;
-    --text: #e8ecf6;
-    --muted: #8b95ad;
-    --dim: #5c6580;
-    --radius: 16px;
   }
 
   * { box-sizing: border-box; }
@@ -25,8 +22,7 @@
     padding: 0;
     background: var(--bg);
     color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
 

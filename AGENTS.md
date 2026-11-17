@@ -5,7 +5,11 @@
 ## 动手前先读
 
 - `README.md` —— 全景：清单结构、设计取舍、对游戏源码的改动
-- `docs/部署-FNOS.md` —— 部署/升级/回滚，含 8 条实测踩坑
+- `docs/部署-FNOS.md` —— 部署/升级/回滚，含踩坑
+- `docs/设计语言规范.md` —— 7 个游戏共用的字体/色彩/圆角/键位/文案
+- **全局技能 `fnos-fpk-packaging`** —— fnapp 打包的通用方法论（跨项目复用）。
+  本项目的 `docs/部署-FNOS.md` 是它在**这个项目**的具体落地；
+  有冲突时以本项目的实测为准，并回写技能
 - `.agents/context/current-state.md` —— 进度台账（按日期追加，不覆盖）
 - `.agents/constraints/*.md` —— 硬约束，动手前必读
 

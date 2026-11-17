@@ -328,6 +328,14 @@ if (!existsSync(portalSrc)) {
   const covers = path.join(ROOT, 'portal', 'covers');
   if (existsSync(covers)) await fs.cp(covers, path.join(OUT, 'covers'), { recursive: true });
 
+  // 设计令牌：放在站点根，游戏页会被注入 <link href="/design-tokens.css">
+  const tokens = path.join(ROOT, 'portal', 'design-tokens.css');
+  if (!existsSync(tokens)) {
+    fail({ id: 'portal' }, '缺少 portal/design-tokens.css');
+  } else {
+    await fs.copyFile(tokens, path.join(OUT, 'design-tokens.css'));
+  }
+
   // 封面是门户页唯一的图片依赖，缺一张就是一张空白卡片。构建期逐个核对，
   // 别等浏览器里看到 404 才发现清单写错了扩展名。
   for (const g of GAMES) {
