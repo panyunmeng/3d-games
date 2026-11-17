@@ -954,7 +954,7 @@
       '<p style="margin-bottom:10px">' + (ok ? '全部通过' : '有失败项，见下') + ' · 耗时 ' +
       (t1 - t0).toFixed(0) + 'ms</p>' +
       '<div style="max-height:46vh;overflow:auto;text-align:left">' + rows + '</div>' +
-      (ok ? '<button class="btn" id="selftestGo" style="margin-top:16px">进入游戏</button>' : '');
+      (ok ? '<button class="btn" id="selftestGo" style="margin-top:16px">开始游戏</button>' : '');
     var goBtn = document.getElementById('selftestGo');
     if (goBtn) goBtn.addEventListener('click', function () { hideOverlay(); startGame(); });
     overlayMode = 'start';
