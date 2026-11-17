@@ -15,7 +15,7 @@ const portal = await p.eval(`JSON.stringify({
   imgs: [...document.querySelectorAll('.shot img')].filter(i=>i.complete&&i.naturalWidth>0).length,
 })`);
 console.log('PORTAL', portal);
-await p.shot('.agents/work/live-portal.png');
+await p.shot('.agents/work/visual/live-portal.png');
 console.log('portal errors:', p.logs.filter(l=>l.type==='error'||l.type==='exception').length);
 p.close();
 
@@ -30,7 +30,7 @@ for (const [id, wait] of GAMES) {
       webgl: !!(c && (c.getContext('webgl2') || c.getContext('webgl'))),
     });
   })()`);
-  await q.shot(`.agents/work/live-${id}.png`);
+  await q.shot(`.agents/work/visual/live-${id}.png`);
   const errs = q.logs.filter(l => l.type === 'error' || l.type === 'exception');
   const o = JSON.parse(r);
   const ok = o.canvas && o.webgl && errs.length === 0;
