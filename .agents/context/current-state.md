@@ -211,3 +211,54 @@ D:\MyProjects\X.AIProjects\3D游戏合集\   ← 只是容器，不是仓库，�
 `.agents/work/tools/cdp.mjs` 与 `ws-two.mjs` 直接 `import 'ws'`，而工具目录
 没有 node_modules，结构重排后跑就报 MODULE_NOT_FOUND。改用 `createRequire`
 从平台根解析，调用者不再需要设 `NODE_PATH`。
+
+## 2026-11-17 · 修掉结构重排后的四处瑕疵
+
+用户问「这样合理吗」，我查证后承认结构合理但实现有四处瑕疵，逐条修掉。
+
+### 1. `.gitignore` 有 7 条死规则
+
+`/3D经典贪吃蛇/` 等 7 条是重构前（游戏还在平台子目录时）的排除项，
+现在路径根本不存在，留着会误导读者以为平台曾包含游戏。已删。
+
+### 2. 「平台能单独 clone」在语义上是错的
+
+实测：clone 推箱子下来 **没有 `dist/`**（在 `.gitignore` 里）。
+所以平台不能「clone 完就构建」。原 README 那句话会让人以为可以。
+改为完整的「从零搭起来」章节：clone 顺序、**中文目录名要求**、
+每个游戏的真实构建命令。
+
+### 3. `build.mjs` 缺「游戏目录在不在」的前置检查
+
+原来 7 个游戏目录全缺时，会逐个报「缺少 index.html」，让人误以为
+是产物没构建，实际是目录没 clone——两种病因处理方式完全不同。
+现在开工前先查，缺了直接打印可整段复制的 clone 命令与中文目录名。
+
+### 4. 清单缺 `build` 字段
+
+原来缺产物一律提示「跑 pnpm build」，但事实是：贪吃蛇/扫雷**零构建**、
+俄罗斯方块/打砖块用 `python build.py`、坦克是 `npm run build`。
+清单新增 `build` 字段，报错据此给准确命令。
+
+### 容器根补导航层（用户允许）
+
+`3D游戏合集/` 原来只是 8 个目录，进去不知道什么关系。补了：
+- `AGENTS.md` —— 导航（8 个目录的角色、依赖方向、改游戏后的完整链条）
+- `.agents/context/layout.md` —— 布局事实（角色/远端/依赖方向）
+- `.agents/constraints/navigation.md` —— 硬约束（不在此建 git、不入库）
+
+**明确不进版本管理**：根目录不建 `.git`，否则 8 个子仓库变嵌套仓库。
+
+### 验证（从零 clone 全流程）
+
+这一步是本次最关键的证据——不是改完看着对，而是真的从零走一遍：
+
+1. `git clone` 平台到 `/tmp/fromscratch`，7 个游戏全缺 → 构建时**给出正确指引**
+2. 按指引 clone 全部 7 个游戏（含中文目录名）→ 全部成功
+3. 按 README 命令逐个构建：俄罗斯方块/打砖块 `python build.py` ✅、
+   推箱子/塔防 `pnpm build` ✅、坦克 `npm run build` ✅
+4. 平台 `node scripts/build.mjs` → **7/7 成功，6143 KB**
+5. `PORT=8096 node server/index.mjs` → `/`、`/games/tank/`、`/games/sokoban/`、
+   `/covers/td.jpg` 全 200，坦克联机服务正常加载
+
+即：**这份 README 是可执行的，不是纸面流程**。
