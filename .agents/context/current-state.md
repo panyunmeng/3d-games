@@ -311,3 +311,59 @@ D:\MyProjects\X.AIProjects\3D游戏合集\   ← 只是容器，不是仓库，�
 - 网关前缀下 `HOME = "/app/3d-games/"`（不是错误的 `/`）
 - 线上重新部署后：7/7 游戏 `back:true / onTop:true / canvas:true / err=0`
 - 门户 7 张卡片全部 `target=_blank`
+
+## 2026-11-17 · 统一设计语言（含全局技能）
+
+用户要求「对比 7 个游戏，风格统一、操作统一、统一设计语言」，确认范围是 C：
+**视觉 + 键位 + 文案全部统一**。
+
+### 先量化差异（不凭印象）
+
+| 维度 | 实测 |
+| --- | --- |
+| 字体 | 3 种写法：`PingFang SC/微软雅黑`、`-apple-system`、`ui-monospace` |
+| 背景色 | 7 个全不同 |
+| 圆角 | 4～28px 不等，同一游戏内也不一致 |
+| 文案 | 「重开」vs「重新开始」、「静音」vs「音效」 |
+| 键位 | Esc/P 暂停、R 重开较一致；M 静音只在部分游戏有 |
+| 输入模型 | **扫雷纯鼠标**，无任何键盘绑定；其余有键盘 |
+
+### 产出
+
+1. `docs/设计语言规范.md` —— 字体/色彩/圆角/间距/键位/文案/按钮三档/
+   HUD 位置/动效。明确「骨架统一、个性保留」：各游戏强调色不动。
+2. `portal/design-tokens.css` —— 唯一可执行副本，只定义变量与通用组件类。
+3. **服务端注入令牌**：游戏页 `<head>` 最前插 `<link>`。位置有讲究——
+   放最前，游戏自己的样式仍在后面因而优先，令牌只兜底「游戏没写」的部分。
+   这样不改 7 个游戏任何一行 CSS。
+4. `portal/index.html` 自己也改用令牌，成为基准样板。
+5. `.agents/work/tools/check-design.mjs` —— 用 `getComputedStyle` 量**实际渲染值**
+   （不是读源码文本），把「是否统一」变成 9 个维度的断言。
+
+### 当前实测：4/9 统一
+
+已统一：`--radius`(12px)、`--radius-sm`(8px)、`--gap-2`(12px)、`--font-sans`。
+未统一：`--bg`、`--text`、实际文字字体、body 背景色、主按钮圆角。
+
+**未统一的 5 项都是游戏自己 CSS 里显式声明的值**，令牌作为兜底压不过它们。
+要真正统一必须改 7 个游戏的 CSS——那是 7 个仓库的改动，已在规范里列为待办。
+
+### 全局技能
+
+用户要求把 fnapp 打包技术做成全局 skill，已建成
+`~/.agents/skills/fnos-fpk-packaging/`（完整版：打包 + 生命周期 + 部署验收）：
+- SKILL.md：9 步流程 + 11 条实测 pitfall
+- references/cmd-main-template.sh：进程/端口/socket 三重判定的完整脚本
+- references/node-dual-listen.md：双监听与前缀剥除要点
+- scripts/pack-tar.py：Windows 打 Linux 包（权限位实测通过）
+- scripts/ssh-put.sh：base64 经 stdin 传大文件
+
+已 commit + push 到 `agent-skills` 仓库（3f6f1df）。
+平台 `AGENTS.md` 已加上指向它的引用，并声明「冲突以本项目实测为准，并回写技能」。
+
+### 顺手修
+
+`.gitignore` 里浏览器 profile 只写了 `chrome-prof/`，但每次验收目录名不同
+（cpd/cp2/cpf…），导致 `git add -A` 把整个 Chrome profile 加进仓库并报
+Permission denied。改成通配 `.agents/work/cp*/`，另加 `.agents/work/*.png`
+挡临时截图。
