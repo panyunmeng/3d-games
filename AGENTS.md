@@ -37,6 +37,9 @@
 不同的根：`ROOT`（本仓库，放 build/ 与 portal/）与 `GAMES_ROOT`（上一级，
 放 7 个游戏）。两者不可混用，改名改路径时先想清楚用哪个。
 
+上一级（容器根）有它自己的 `AGENTS.md` 与 `.agents/`，只做导航、不进版本
+管理。新增一个游戏时，那两处也要同步补上目录与仓库地址。
+
 游戏目录各有自己的 git 仓库与 `AGENTS.md`，它们的约定在那边生效。
 要改游戏本身，去那边的仓库改。
 
@@ -51,7 +54,7 @@
 ## 命令
 
 ```bash
-npm install                    # 只需要 ws
+npm install                    # 只需要 ws（构建前需 7 个游戏已 clone 并各自构建过）
 node scripts/build.mjs         # 收产物 → build/www（带子路径自检）
 node scripts/build.mjs --only=tank   # 只重建一个，其余沿用
 PORT=8099 node server/index.mjs      # 本地跑

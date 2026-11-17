@@ -34,6 +34,7 @@ export const GAMES = [
     accent: '#6cf0a8',
     cover: 'covers/snake.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-jingdian-tanchishe',
+    build: '（零构建，直接可用）',
   },
   {
     id: 'tetris',
@@ -48,6 +49,7 @@ export const GAMES = [
     accent: '#7aa2ff',
     cover: 'covers/tetris.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-eluosifangkuai',
+    build: 'python build.py',
   },
   {
     id: 'breakout',
@@ -62,6 +64,7 @@ export const GAMES = [
     accent: '#ff7b54',
     cover: 'covers/breakout.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-dazhuankuai',
+    build: 'python build.py',
   },
   {
     id: 'minesweeper',
@@ -76,6 +79,7 @@ export const GAMES = [
     accent: '#c8863c',
     cover: 'covers/minesweeper.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-sao-lei',
+    build: '（零构建，直接可用）',
   },
   {
     id: 'sokoban',
@@ -90,6 +94,7 @@ export const GAMES = [
     accent: '#b8834a',
     cover: 'covers/sokoban.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-sokoban',
+    build: 'pnpm install && pnpm build',
   },
   {
     id: 'td',
@@ -104,6 +109,7 @@ export const GAMES = [
     accent: '#4dd0e1',
     cover: 'covers/td.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-tafang',
+    build: 'pnpm install && pnpm build',
   },
   {
     id: 'tank',
@@ -120,5 +126,6 @@ export const GAMES = [
     accent: '#7ac043',
     cover: 'covers/tank.jpg',
     repo: 'http://panyunmeng.cn:3000/panyunmeng/3d-tan-ke-da-zhan',
+    build: 'npm install && npm run build',
   },
 ];

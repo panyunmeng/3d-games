@@ -27,18 +27,55 @@
 ```
 
 平台与游戏**互不包含**：8 个平级目录，8 个独立仓库。构建时平台从上一级
-读取各游戏的 `dist/`，产物不回流、不入库。游戏位置可用 `GAMES_ROOT`
-环境变量覆盖，因此平台也能单独 clone 到任何地方去打包。
+读取各游戏的 `dist/`，产物不回流、不入库。
 
-| 游戏 | 子路径 | 源码仓库 | 交付形态 |
-| --- | --- | --- | --- |
-| 贪吃蛇 | `/games/snake/` | [3d-jingdian-tanchishe](http://panyunmeng.cn:3000/panyunmeng/3d-jingdian-tanchishe) | 零构建 ES module |
-| 俄罗斯方块 | `/games/tetris/` | [3d-eluosifangkuai](http://panyunmeng.cn:3000/panyunmeng/3d-eluosifangkuai) | 单文件 HTML |
-| 打砖块 | `/games/breakout/` | [3d-dazhuankuai](http://panyunmeng.cn:3000/panyunmeng/3d-dazhuankuai) | 单文件 HTML |
-| 扫雷 | `/games/minesweeper/` | [3d-sao-lei](http://panyunmeng.cn:3000/panyunmeng/3d-sao-lei) | 零构建 ES module |
-| 推箱子 | `/games/sokoban/` | [3d-sokoban](http://panyunmeng.cn:3000/panyunmeng/3d-sokoban) | Vite 产物 |
-| 塔防 | `/games/td/` | [3d-tafang](http://panyunmeng.cn:3000/panyunmeng/3d-tafang) | Vite 产物 |
-| 坦克大战 | `/games/tank/` | [3d-tan-ke-da-zhan](http://panyunmeng.cn:3000/panyunmeng/3d-tan-ke-da-zhan) | Vite 产物 + Node WS |
+## 从零搭起来
+
+平台**不能**只 clone 自己就构建。游戏目录是它的兄弟，且各游戏的 `dist/`
+在各自的 `.gitignore` 里，所以必须逐个 clone 并构建一次：
+
+```bash
+mkdir -p 3D游戏合集 && cd 3D游戏合集
+
+# 平台
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-game-collection.git "3D游戏聚合平台"
+
+# 7 个游戏：仓库名是拼音，目录名必须是中文，否则平台找不到
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-jingdian-tanchishe.git "3D经典贪吃蛇"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-eluosifangkuai.git   "3D俄罗斯方块"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-dazhuankuai.git       "3D打砖块"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-sao-lei.git           "3D扫雷"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-sokoban.git           "3D推箱子"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-tafang.git            "3D塔防"
+git clone http://panyunmeng.cn:3000/panyunmeng/3d-tan-ke-da-zhan.git    "3D坦克大战"
+
+# 各游戏构建（命令见下表；贪吃蛇/扫雷零构建，跳过）
+cd "3D推箱子" && pnpm install && pnpm build && cd ..
+cd "3D塔防"   && pnpm install && pnpm build && cd ..
+cd "3D坦克大战" && npm install && npm run build && cd ..
+
+# 平台自身
+cd "3D游戏聚合平台" && npm install && node scripts/build.mjs
+```
+
+构建脚本会先查 7 个游戏目录在不在，缺了直接打印上面这串 clone 命令，
+所以忘了哪一步时重跑一次 `node scripts/build.mjs` 就能看到指引。
+
+游戏不在上一级时用 `GAMES_ROOT` 指定：
+
+```bash
+GAMES_ROOT=/path/to/3D游戏合集 node scripts/build.mjs
+```
+
+| 游戏 | 子路径 | 源码仓库 | 构建命令 | 交付形态 |
+| --- | --- | --- | --- | --- |
+| 贪吃蛇 | `/games/snake/` | [3d-jingdian-tanchishe](http://panyunmeng.cn:3000/panyunmeng/3d-jingdian-tanchishe) | 零构建 | ES module |
+| 俄罗斯方块 | `/games/tetris/` | [3d-eluosifangkuai](http://panyunmeng.cn:3000/panyunmeng/3d-eluosifangkuai) | `python build.py` | 单文件 HTML |
+| 打砖块 | `/games/breakout/` | [3d-dazhuankuai](http://panyunmeng.cn:3000/panyunmeng/3d-dazhuankuai) | `python build.py` | 单文件 HTML |
+| 扫雷 | `/games/minesweeper/` | [3d-sao-lei](http://panyunmeng.cn:3000/panyunmeng/3d-sao-lei) | 零构建 | ES module |
+| 推箱子 | `/games/sokoban/` | [3d-sokoban](http://panyunmeng.cn:3000/panyunmeng/3d-sokoban) | `pnpm install && pnpm build` | Vite 产物 |
+| 塔防 | `/games/td/` | [3d-tafang](http://panyunmeng.cn:3000/panyunmeng/3d-tafang) | `pnpm install && pnpm build` | Vite 产物 |
+| 坦克大战 | `/games/tank/` | [3d-tan-ke-da-zhan](http://panyunmeng.cn:3000/panyunmeng/3d-tan-ke-da-zhan) | `npm install && npm run build` | Vite 产物 + Node WS |
 
 坦克大战是唯一带服务端的游戏：WebSocket 挂在 `/games/tank/ws`，
 **由合集的进程在内部挂载**，不额外占端口。

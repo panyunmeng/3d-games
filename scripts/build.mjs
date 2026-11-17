@@ -127,7 +127,7 @@ async function collectStatic(game, dest) {
 async function collectSingle(game, dest) {
   const from = path.join(GAMES_ROOT, game.dir, game.file);
   if (!existsSync(from)) {
-    fail(game, `缺少 ${game.file}（先在 ${game.dir} 里跑 python build.py）`);
+    fail(game, `缺少 ${game.file}（先在 ${game.dir} 里跑 ${game.build ?? 'python build.py'}）`);
     return '';
   }
   await fs.mkdir(dest, { recursive: true });
@@ -147,7 +147,7 @@ async function collectVite(game, dest) {
   const from = path.join(GAMES_ROOT, game.dir, game.dist ?? 'dist');
   const indexHtml = path.join(from, 'index.html');
   if (!existsSync(indexHtml)) {
-    fail(game, `缺少产物 ${path.relative(GAMES_ROOT, from)}/index.html（先在 ${game.dir} 里跑 pnpm build）`);
+    fail(game, `缺少产物 ${path.relative(GAMES_ROOT, from)}/index.html（先在 ${game.dir} 里跑 ${game.build ?? 'pnpm build'}）`);
     return '';
   }
   await fs.cp(from, dest, { recursive: true });
@@ -155,7 +155,7 @@ async function collectVite(game, dest) {
   if (game.server) {
     const entry = path.join(GAMES_ROOT, game.dir, game.server.entry);
     if (!existsSync(entry)) {
-      fail(game, `缺少服务端产物 ${game.server.entry}（先在 ${game.dir} 里跑 pnpm build）`);
+      fail(game, `缺少服务端产物 ${game.server.entry}（先在 ${game.dir} 里跑 ${game.build ?? 'pnpm build'}）`);
     } else {
       // 服务端产物进 games/<id>/server/，合集服务按清单里的 mount 挂它的 WS
       const destServer = path.join(dest, 'server', 'index.mjs');
@@ -217,7 +217,35 @@ async function verifyGame(game, dest) {
 /* ── 主流程 ─────────────────────────────────────────────────────── */
 
 const started = Date.now();
-console.log(c.bold('\n构建 3D 游戏合集\n'));
+console.log(c.bold('\n构建 3D 游戏聚合平台\n'));
+
+/**
+ * 开工前先查「游戏在不在」，而不是等逐个收集时才报「缺少某文件」。
+ *
+ * 为什么值得单列一步：平台与游戏是平级目录，平台单独 clone 出来时
+ * GAMES_ROOT 下根本没有任何游戏。此时逐个报「缺少 index.html」
+ * 会让人以为是产物没构建，实际是目录根本没 clone——两种病因，
+ * 处理方式完全不同。所以这里先一次性说清缺哪些游戏、该 clone 到哪、
+ * 目录名必须叫什么（仓库名是拼音，目录名是中文，不写清楚必然放错）。
+ */
+if (!only) {
+  const missingGames = GAMES.filter((g) => !existsSync(path.join(GAMES_ROOT, g.dir)));
+  if (missingGames.length) {
+    console.error(c.err(`\n✗ ${GAMES_ROOT} 下缺少 ${missingGames.length} 个游戏目录\n`));
+    console.error(c.dim('平台与游戏是平级目录，需要先 clone 到平台根的同级位置：\n'));
+    const baseName = '3D游戏合集';
+    console.error(c.dim(`  mkdir -p "${baseName}" && cd "${baseName}"`));
+    console.error(c.dim(`  # 平台自己（本脚本所在仓库）`));
+    console.error(c.dim(`  git clone <本仓库地址> "3D游戏聚合平台"`));
+    console.error(c.dim(`  # 7 个游戏，注意目录名必须是中文，否则构建找不到`));
+    for (const g of GAMES) {
+      console.error(c.dim(`  git clone ${g.repo}.git "${g.dir}"${existsSync(path.join(GAMES_ROOT, g.dir)) ? '  # 已存在' : ''}`));
+    }
+    console.error(c.dim(`\n已在别处时可用环境变量指定：GAMES_ROOT=/path/to/3D游戏合集`));
+    console.error(c.dim('clone 完还要各游戏目录里跑一次构建（dist/ 不入库）\n'));
+    process.exit(1);
+  }
+}
 
 // keep 记录「本次真正产出到输出目录里的游戏」，门户页只列它们，
 // 避免清单里写了但产物缺失时门户页出现一张点进去 404 的卡片。
