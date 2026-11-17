@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -322,37 +323,47 @@ const httpServer = createServer((req, res) => {
   void serveStatic(req, res);
 });
 
-const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+/**
+ * 把 WebSocket 连接处理挂到一个外部的 WebSocketServer 上。
+ *
+ * 合集（3D游戏合集）是一个进程管七个游戏，不能再为坦克单开端口，
+ * 所以监听和静态文件都交给合集，坦克只贡献这段连接逻辑。
+ * 单独部署时下面的代码自己 new 一个 WSS 交给它，行为与原来一致。
+ *
+ * 注意本函数不改 wss 的 server 绑定：调用方用 noServer 还是 server 模式
+ * 由调用方决定，这里只负责「拿到连接之后怎么处理」。
+ */
+export function attachWebSocket(server: WebSocketServer): void {
+  server.on('connection', (ws: WebSocket) => {
+    const conn: Conn = {
+      ws,
+      playerId: '',
+      room: null,
+      input: { move: 0, turn: 0, aim: null, fire: false },
+      alive: true,
+    };
 
-wss.on('connection', (ws: WebSocket) => {
-  const conn: Conn = {
-    ws,
-    playerId: '',
-    room: null,
-    input: { move: 0, turn: 0, aim: null, fire: false },
-    alive: true,
-  };
+    ws.on('message', (data) => {
+      let msg: ClientMessage;
+      try {
+        msg = JSON.parse(String(data)) as ClientMessage;
+      } catch {
+        return;
+      }
+      handleMessage(conn, msg);
+    });
 
-  ws.on('message', (data) => {
-    let msg: ClientMessage;
-    try {
-      msg = JSON.parse(String(data)) as ClientMessage;
-    } catch {
-      return;
-    }
-    handleMessage(conn, msg);
+    ws.on('close', () => {
+      (ws as WebSocket & { conn?: Conn }).conn = undefined;
+      conn.alive = false;
+      if (conn.room) conn.room.remove(conn);
+    });
+
+    ws.on('error', () => {
+      conn.alive = false;
+    });
   });
-
-  ws.on('close', () => {
-    (ws as WebSocket & { conn?: Conn }).conn = undefined;
-    conn.alive = false;
-    if (conn.room) conn.room.remove(conn);
-  });
-
-  ws.on('error', () => {
-    conn.alive = false;
-  });
-});
+}
 
 function sendError(conn: Conn, msg: string): void {
   if (conn.ws.readyState === WebSocket.OPEN) conn.ws.send(JSON.stringify({ t: 'error', msg }));
@@ -420,14 +431,37 @@ function clampNum(v: unknown, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }
 
-httpServer.listen(PORT, () => {
-  console.log(`[tank3d] 服务已启动: http://0.0.0.0:${PORT}  (静态目录 ${DIST})`);
-});
+/**
+ * 独立运行时才自己监听端口。
+ *
+ * 合集把它当库 import，那时监听归合集所有；这里用「本模块是不是入口脚本」
+ * 来区分两种用法，而不是加环境变量开关——开关忘了设就会静默占端口。
+ * 注意 esbuild 会把本模块打成 dist-server/index.mjs，产物同样走这条路。
+ */
+function isEntryScript(): boolean {
+  const invoked = process.argv[1];
+  if (!invoked) return false;
+  try {
+    return realpathSync(invoked) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
 
-process.on('SIGTERM', () => {
-  httpServer.close();
-  process.exit(0);
-});
+if (isEntryScript()) {
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  attachWebSocket(wss);
+
+  httpServer.listen(PORT, () => {
+    console.log(`[tank3d] 服务已启动: http://0.0.0.0:${PORT}  (静态目录 ${DIST})`);
+  });
+
+  process.on('SIGTERM', () => {
+    httpServer.close();
+    process.exit(0);
+  });
+}
 
 export { GRID_H, GRID_W, LEVEL_COUNT };
+export { WebSocketServer };
 export type { LevelDef };

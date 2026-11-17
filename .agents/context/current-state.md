@@ -57,3 +57,28 @@
 - **验收**：NAS 本机 `/healthz` 200；Windows 侧 `net-smoke ws://panyunmeng.cn:8080/ws` 通过（62 帧/3 s、双端各 15.25 m、同 tick 一致 62/62）；浏览器实机双人同屏可玩
 - **两个坑**：① 改过 package.json 依赖分组后没重建 lock，容器 `npm ci` 失败（已用 `npm install --package-lock-only` 修复并提交）；② `panyunmeng` 不在 docker 组，docker 命令都要 `sudo -S`
 - **遗留**：FNOS 上 3000 被 Gitea 占，所以用 8080；如需换端口改 `docker-compose.yml` 左侧端口后 `docker compose up -d`
+
+## 2026-11-17 · 部署形态变更：独立容器下线，并入合集
+
+本游戏的 NAS 部署已从「独立 docker 容器占 8080」改为「作为 3D 游戏合集应用
+的一部分，跑在合集进程内」。原容器与镜像已删除，8080 释放。
+
+**现在的入口**：
+- 端口：`http://panyunmeng.cn:8081/games/tank/`
+- 网关：`https://panyunmeng.cn:5667/app/3d-games/games/tank`
+- 联机 WS：`ws://<host>:8081/games/tank/ws`（挂在合集进程内，不额外占端口）
+
+**为并入合集对本项目做的三处改动**（合集会用到，单机部署不受影响）：
+1. `vite.config.ts` 加 `base: './'` —— 子路径部署必需
+2. `src/net/client.ts` 的 WS 端点改由 `location.pathname` 推导，不再写死 `/ws`
+3. `server/index.ts` 导出 `attachWebSocket`，且**被 import 时不自启监听**
+   （用 `isEntryScript()` 区分；`node dist-server/index.mjs` 行为与原来一致）
+
+三处都已验证：`pnpm build` 通过，独立模式 `PORT=8097 node dist-server/index.mjs`
+正常起服务。
+
+**部署职责已转出**：本仓库不再负责 NAS 部署（`docker-compose.yml` /
+`Dockerfile` 仍可本地用，但线上不再走这条）。部署脚本与文档在
+`D:\MyProjects\X.AIProjects\3D游戏合集`。
+
+旧容器的宿主目录备份：`/home/panyunmeng/tank3d-backup-20261117-1239.tar.gz`。

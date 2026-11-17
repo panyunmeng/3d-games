@@ -21,6 +21,18 @@ export interface NetCallbacks {
 
 const INPUT_INTERVAL = 1 / 30;
 
+/**
+ * 联机端点。合集里游戏挂在子路径（如 /games/tank/）下，服务端也挂在同一个
+ * 子路径的 `ws` 上，所以端点必须由**页面自身路径**推导，不能写死根路径 `/ws`。
+ * 页面可能是 `/games/tank/` 或 `/games/tank/index.html`，两种情况都归一到目录。
+ */
+function wsEndpoint(): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  let dir = location.pathname;
+  if (!dir.endsWith('/')) dir = dir.slice(0, dir.lastIndexOf('/') + 1);
+  return `${proto}://${location.host}${dir}ws`;
+}
+
 function lerpAngle(a: number, b: number, t: number): number {
   let d = (b - a) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -55,8 +67,7 @@ export class NetClient {
 
   connect(): void {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/ws`);
+    const ws = new WebSocket(wsEndpoint());
     this.ws = ws;
     ws.onopen = () => {
       this.cb.onStatus('已连接服务器', 'ok');
