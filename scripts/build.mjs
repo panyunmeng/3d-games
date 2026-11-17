@@ -22,7 +22,20 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { GAMES } from '../games.manifest.mjs';
 
+/**
+ * 两个根，含义不同，不能混用：
+ *   ROOT       本平台仓库根（portal/、server/、build/ 都在它下面）
+ *   GAMES_ROOT 7 个游戏所在目录 = 平台根的上一级（与平台平级）
+ *
+ * 分开命名是为了让「平台的路径」和「游戏的路径」在代码里一眼能区分。
+ * 以前只有一个 ROOT 兼任两者，结构重排后那样写必然出错。
+ *
+ * 游戏位置可由环境变量 GAMES_ROOT 覆盖，方便把平台单独 clone 到别处去打包。
+ */
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const GAMES_ROOT = process.env.GAMES_ROOT
+  ? path.resolve(process.env.GAMES_ROOT)
+  : path.resolve(ROOT, '..');
 const OUT = path.join(ROOT, 'build', 'www');
 
 const args = new Map(
@@ -95,7 +108,7 @@ const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 
 /** 已构建好的目录：按清单原样搬文件。 */
 async function collectStatic(game, dest) {
-  const from = path.join(ROOT, game.dir);
+  const from = path.join(GAMES_ROOT, game.dir);
   const files = game.files ?? [];
   let n = 0;
   for (const rel of files) {
@@ -112,7 +125,7 @@ async function collectStatic(game, dest) {
 
 /** 单文件 HTML：进 games/<id>/index.html。 */
 async function collectSingle(game, dest) {
-  const from = path.join(ROOT, game.dir, game.file);
+  const from = path.join(GAMES_ROOT, game.dir, game.file);
   if (!existsSync(from)) {
     fail(game, `缺少 ${game.file}（先在 ${game.dir} 里跑 python build.py）`);
     return '';
@@ -131,16 +144,16 @@ async function collectSingle(game, dest) {
  * 合集只负责打包；缺产物时明确报错并指出该去哪跑，不在这里偷偷装依赖。
  */
 async function collectVite(game, dest) {
-  const from = path.join(ROOT, game.dir, game.dist ?? 'dist');
+  const from = path.join(GAMES_ROOT, game.dir, game.dist ?? 'dist');
   const indexHtml = path.join(from, 'index.html');
   if (!existsSync(indexHtml)) {
-    fail(game, `缺少产物 ${path.relative(ROOT, from)}/index.html（先在 ${game.dir} 里跑 pnpm build）`);
+    fail(game, `缺少产物 ${path.relative(GAMES_ROOT, from)}/index.html（先在 ${game.dir} 里跑 pnpm build）`);
     return '';
   }
   await fs.cp(from, dest, { recursive: true });
 
   if (game.server) {
-    const entry = path.join(ROOT, game.dir, game.server.entry);
+    const entry = path.join(GAMES_ROOT, game.dir, game.server.entry);
     if (!existsSync(entry)) {
       fail(game, `缺少服务端产物 ${game.server.entry}（先在 ${game.dir} 里跑 pnpm build）`);
     } else {

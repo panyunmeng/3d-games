@@ -1,7 +1,14 @@
 // 极简 CDP 驱动：开标签、导航、评估、截图，够本会话验收用。
 // 自己写而不用现成库，是因为要验的正是「打开页面后真实报什么错」，
 // 中间层越薄越好定位。
-import WebSocket from 'ws';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+// 本工具放在 .agents/work/tools/ 下，那个目录没有 node_modules；
+// ws 装在平台根。用 createRequire 从平台根解析，调用者不需要设 NODE_PATH。
+const PLATFORM_ROOT = path.resolve(fileURLToPath(new URL('.', import.meta.url)), '../../..');
+const WebSocket = createRequire(path.join(PLATFORM_ROOT, 'noop.js'))('ws');
 
 export async function openPage(url, { width = 1440, height = 900 } = {}) {
   const list = await (await fetch('http://127.0.0.1:9333/json/new?' + encodeURIComponent(url), { method: 'PUT' })).json();
