@@ -40,6 +40,7 @@ let game = new Game(LEVEL_CACHE[0]!);
 let queue: number[] = [];
 let lastStepAt = 0;
 let finished = false;
+let paused = false;
 let winTimer = 0;
 
 const ui = new Ui({
@@ -83,6 +84,7 @@ function loadLevel(id: number): void {
   if (location.hash !== `#${id}`) history.replaceState(null, '', `#${id}`);
   queue = [];
   finished = false;
+  paused = false;
   clearTimeout(winTimer);
   ui.hideWin();
   game = new Game(level);
@@ -103,6 +105,7 @@ function undo(): void {
   // 过关后再按撤销：先关掉弹窗，同时把最后一步真的退回去
   if (finished) {
     finished = false;
+    paused = false;
     clearTimeout(winTimer);
     ui.hideWin();
   }
@@ -163,6 +166,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   switch (key) {
+    // 暂停 / 继续：Esc 与 P 都接受（设计语言规范 §二）
+    case 'escape':
+    case 'p':
+      e.preventDefault();
+      if (!finished) setPaused(!paused);
+      break;
     case 'z':
     case 'u':
       e.preventDefault();
@@ -183,8 +192,24 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+/**
+ * 暂停 / 继续。
+ *
+ * 推箱子是回合制、没有计时，暂停的全部意义就是「挡住输入」：
+ * 键盘排队、点击寻路、拖拽旋转都停下，避免误触把箱子推错。
+ * 已排队的移动一并清掉——继续后不该因为暂停前的按队列而冲出几步。
+ */
+function setPaused(next: boolean): void {
+  if (paused === next) return;
+  paused = next;
+  queue = [];
+  const el = document.getElementById('pause');
+  if (el) (el as HTMLElement).hidden = !paused;
+}
+
 function tick(now: number): void {
-  if (!finished && queue.length > 0 && now - lastStepAt >= MOVE_MS) {
+  // 暂停时不消费移动队列：已排队的按键也一并丢掉，继续后不会突然冲出几步
+  if (!finished && !paused && queue.length > 0 && now - lastStepAt >= MOVE_MS) {
     const dir = queue.shift()!;
     const step = game.move(dir);
     if (!step) {
