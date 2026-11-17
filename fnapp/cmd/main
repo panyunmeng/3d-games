@@ -1,0 +1,258 @@
+#!/bin/bash
+# 3D 游戏合集 · 生命周期脚本
+#   用法：main start|stop|status
+#   返回码：start/stop 0=成功 1=失败；status 0=运行中 3=未运行
+#
+# 为什么状态判定不只看进程：Node 进程存在但监听没起来（端口被占、socket
+# 目录不可写）时，应用中心会显示「运行中」而用户点进去是一片空白。所以
+# status 必须同时核对进程、端口和网关 socket 三件事。
+set -u
+
+APP_NAME="3d-games"
+PKG_VAR="${TRIM_PKGVAR:-}"
+PKG_DEST="${TRIM_APPDEST:-}"
+PKG_TMP="${TRIM_PKGTMP:-}"
+PKG_HOME="${TRIM_PKGHOME:-}"
+TEMP_LOG="${TRIM_TEMP_LOGFILE:-}"
+
+PID_FILE="${PKG_VAR}/app.pid"
+LOG_FILE="${PKG_VAR}/app.log"
+SOCKET_PATH="${PKG_DEST}/app.sock"
+GATEWAY_PREFIX="/app/3d-games"
+# 合集自带 Node 运行时依赖（ws），用系统 nodejs 应用，不随包分发二进制
+NODE_BIN="/var/apps/nodejs_v24/target/bin"
+ENTRY="${PKG_DEST}/server/index.mjs"
+WEB_ROOT="${PKG_DEST}/www"
+
+# 端口与开关全部来自向导环境变量，缺省值与 wizard/install 的默认值保持一致
+PORT="${wizard_port:-8081}"
+ENABLE_PORT="${wizard_enable_port:-true}"
+LAN_ONLY="${wizard_lan_only:-false}"
+HOST="0.0.0.0"
+if [ "${LAN_ONLY}" = "true" ]; then
+    HOST="127.0.0.1"
+fi
+
+log() {
+    printf '[%s] [main] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"${LOG_FILE}" 2>/dev/null || true
+}
+
+# 用户可见的错误必须写进 TRIM_TEMP_LOGFILE，fnOS 会把它弹成对话框；
+# 只写自己的日志文件，用户看到的就是「启动失败」四个字，查不到原因。
+fail() {
+    local msg="$1"
+    log "ERROR ${msg}"
+    [ -n "${TEMP_LOG}" ] && printf '%s\n' "${msg}" >"${TEMP_LOG}"
+    return 1
+}
+
+# 端口号再校验一次：向导值是字符串，且可能被手工改过配置文件
+valid_port() {
+    case "$1" in
+    '' | *[!0-9]*) return 1 ;;
+    esac
+    [ "$1" -ge 1024 ] && [ "$1" -le 65535 ]
+}
+
+pid_alive() {
+    local pid="$1"
+    [ -n "${pid}" ] || return 1
+    # 主动排除僵尸态：kill -0 对已退出未回收的进程仍然成功，会造成
+    # 「杀不掉、重启后仍是旧进程」的假象
+    if [ -r "/proc/${pid}/stat" ]; then
+        local st
+        st=$(awk '{print $3}' "/proc/${pid}/stat" 2>/dev/null)
+        case "${st}" in
+        Z | X) return 1 ;;
+        esac
+    fi
+    kill -0 "${pid}" 2>/dev/null
+}
+
+read_pid() {
+    [ -r "${PID_FILE}" ] || return 1
+    local pid
+    pid=$(head -n 1 "${PID_FILE}" 2>/dev/null | tr -d '[:space:]')
+    pid_alive "${pid}" || return 1
+    printf '%s' "${pid}"
+}
+
+# 端口是否真的在听（而不是随便有个进程占着）
+port_listening() {
+    [ "${ENABLE_PORT}" = "true" ] || return 0
+    ss -ltn 2>/dev/null | awk -v p=":${PORT}$" '$4 ~ p {found=1} END {exit !found}'
+}
+
+socket_present() {
+    [ -S "${SOCKET_PATH}" ]
+}
+
+truncate_log() {
+    [ -f "${LOG_FILE}" ] || return 0
+    local size
+    size=$(wc -c <"${LOG_FILE}" 2>/dev/null | tr -d ' ')
+    case "${size}" in
+    '' | *[!0-9]*) return 0 ;;
+    esac
+    # 长跑应用日志不能无限涨：超过 10MB 只留末尾 2MB
+    if [ "${size}" -gt 10485760 ]; then
+        tail -c 2097152 "${LOG_FILE}" >"${LOG_FILE}.tmp" && mv "${LOG_FILE}.tmp" "${LOG_FILE}"
+    fi
+}
+
+start_app() {
+    [ -n "${PKG_VAR}" ] && [ -n "${PKG_DEST}" ] || {
+        fail "TRIM_* 环境变量缺失，无法启动（fnOS 框架异常）"
+        return 1
+    }
+    [ -x "${NODE_BIN}/node" ] || {
+        fail "缺少 Node 运行时 ${NODE_BIN}/node，请先在应用中心安装 Node.js v24"
+        return 1
+    }
+    [ -f "${ENTRY}" ] || {
+        fail "缺少服务入口 ${ENTRY}（安装包不完整）"
+        return 1
+    }
+    [ -f "${WEB_ROOT}/index.html" ] || {
+        fail "缺少静态产物 ${WEB_ROOT}/index.html（安装包不完整）"
+        return 1
+    }
+    valid_port "${PORT}" || {
+        fail "端口 ${PORT} 不合法，应为 1024～65535 的整数"
+        return 1
+    }
+
+    if read_pid >/dev/null && socket_present; then
+        log "已在运行"
+        return 0
+    fi
+
+    truncate_log
+    mkdir -p "${PKG_VAR}" || {
+        fail "无法创建数据目录 ${PKG_VAR}"
+        return 1
+    }
+
+    # 上一次异常退出会留下陈旧 pid / socket：不清理会导致
+    # 要么绑不上 socket，要么 status 误判成健康的旧进程
+    rm -f "${PID_FILE}" "${SOCKET_PATH}"
+
+    local listen_port="${PORT}"
+    [ "${ENABLE_PORT}" = "true" ] || listen_port="0"
+
+    # 端口被别的进程占着时提前失败，把「谁占了」写进用户可见日志，
+    # 比让 Node 抛 EADDRINUSE 再被前端显示成「启动失败」有用得多
+    if [ "${listen_port}" != "0" ] && ss -ltn 2>/dev/null | awk -v p=":${listen_port}$" '$4 ~ p {f=1} END {exit !f}'; then
+        local holder
+        holder=$(ss -ltnp 2>/dev/null | awk -v p=":${listen_port}$" '$4 ~ p' | head -1)
+        fail "端口 ${listen_port} 已被占用，请在应用设置里改用其它端口。占用信息：${holder}"
+        return 1
+    fi
+
+    log "启动：port=${listen_port} host=${HOST} prefix=${GATEWAY_PREFIX} web=${WEB_ROOT}"
+
+    (
+        cd "${PKG_DEST}" || exit 1
+        PORT="${listen_port}" \
+        HOST="${HOST}" \
+        WEB_ROOT="${WEB_ROOT}" \
+        GATEWAY_SOCKET_PATH="${SOCKET_PATH}" \
+        GATEWAY_PREFIX="${GATEWAY_PREFIX}" \
+        NODE_ENV=production \
+        HOME="${PKG_HOME:-${PKG_VAR}}" \
+        TMPDIR="${PKG_TMP:-/tmp}" \
+            nohup "${NODE_BIN}/node" "${ENTRY}" >>"${LOG_FILE}" 2>&1 &
+        echo $! >"${PID_FILE}"
+    )
+
+    # 等监听就绪。判据是 socket 出现（端口模式下也要等，因为它同时开网关），
+    # 进程中途死掉就提前返回，不白等满超时
+    local pid
+    pid=$(head -n 1 "${PID_FILE}" 2>/dev/null | tr -d '[:space:]')
+    local i=0
+    while [ "${i}" -lt 60 ]; do
+        if socket_present && port_listening; then
+            log "启动完成 pid=${pid}"
+            return 0
+        fi
+        if ! pid_alive "${pid}"; then
+            fail "服务启动后立即退出，详见 ${LOG_FILE}：$(tail -n 3 "${LOG_FILE}" 2>/dev/null | tr '\n' ' ')"
+            return 1
+        fi
+        sleep 0.5
+        i=$((i + 1))
+    done
+
+    fail "服务在 30 秒内未就绪（socket 或端口未出现），详见 ${LOG_FILE}"
+    return 1
+}
+
+stop_app() {
+    local pid
+    if ! pid=$(read_pid); then
+        log "未在运行，清理残留"
+        rm -f "${PID_FILE}"
+        [ -e "${SOCKET_PATH}" ] && rm -f "${SOCKET_PATH}"
+        return 0
+    fi
+
+    log "停止 pid=${pid}"
+    # 先 TERM 让 Node 自己走 shutdown（它会 unlink socket），超时再 KILL
+    kill -TERM "${pid}" 2>/dev/null
+
+    local i=0
+    while pid_alive "${pid}" && [ "${i}" -lt 20 ]; do
+        sleep 0.5
+        i=$((i + 1))
+    done
+
+    if pid_alive "${pid}"; then
+        log "TERM 超时，强制 KILL"
+        kill -KILL "${pid}" 2>/dev/null
+        sleep 0.5
+    fi
+
+    rm -f "${PID_FILE}"
+    # KILL 路径下 Node 来不及清理 socket，这里兜底
+    [ -e "${SOCKET_PATH}" ] && rm -f "${SOCKET_PATH}"
+    log "已停止"
+    return 0
+}
+
+status_app() {
+    local pid
+    if ! pid=$(read_pid); then
+        return 3
+    fi
+    socket_present || {
+        log "status: 进程 ${pid} 在但 socket 缺失"
+        return 3
+    }
+    port_listening || {
+        log "status: 进程 ${pid} 在但端口 ${PORT} 未监听"
+        return 3
+    }
+    return 0
+}
+
+case "${1:-}" in
+start)
+    start_app || exit 1
+    exit 0
+    ;;
+stop)
+    stop_app || exit 1
+    exit 0
+    ;;
+status)
+    if status_app; then exit 0; else exit 3; fi
+    ;;
+restart)
+    stop_app && start_app
+    exit $?
+    ;;
+*)
+    echo "用法: $0 {start|stop|status|restart}" >&2
+    exit 1
+    ;;
+esac

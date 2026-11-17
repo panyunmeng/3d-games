@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D 游戏合集</title>
+<meta name="description" content="七个纯前端 3D 小游戏：贪吃蛇、俄罗斯方块、打砖块、扫雷、推箱子、塔防、坦克大战。" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131826'/%3E%3Cpath d='M9 20.5 16 9l7 11.5z' fill='none' stroke='%236cf0a8' stroke-width='2' stroke-linejoin='round'/%3E%3Ccircle cx='16' cy='17' r='1.8' fill='%237aa2ff'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0b0e17;
+    --bg-soft: #121728;
+    --card: #161c2e;
+    --line: #232b42;
+    --text: #e8ecf6;
+    --muted: #8b95ad;
+    --dim: #5c6580;
+    --radius: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 背景：两团低饱和辉光，纯 CSS 不引外部图片，断网也一致 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 12% -10%, rgba(108, 240, 168, 0.10), transparent 60%),
+      radial-gradient(50rem 36rem at 92% 4%, rgba(122, 162, 255, 0.12), transparent 60%);
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 24px 72px;
+  }
+
+  header.hero { margin-bottom: 40px; }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 14px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 22px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  h1 {
+    margin: 0 0 12px;
+    font-size: clamp(28px, 4.2vw, 44px);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+  }
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(100deg, #6cf0a8, #7aa2ff 70%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .lede {
+    margin: 0;
+    max-width: 62ch;
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.75;
+  }
+
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    margin-top: 26px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+  }
+  .stat b {
+    display: block;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+  }
+  /* 中文量词（「单文件」这种）在同样字号下比数字显得更重，
+     统一压到 15px 让它和数字视觉同高。 */
+  .stat b.is-text { font-size: 15px; padding-top: 4px; }
+  .stat span { font-size: 12px; color: var(--dim); }
+
+  /* 卡片网格：自适应到 3 列，窄屏自动降列 */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 20px;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover, .card:focus-visible {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+    box-shadow: 0 18px 40px -18px color-mix(in srgb, var(--accent) 60%, transparent);
+    outline: none;
+  }
+
+  .shot {
+    position: relative;
+    aspect-ratio: 16 / 10;
+    background: var(--bg-soft);
+    overflow: hidden;
+  }
+  .shot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.35s ease;
+  }
+  .card:hover .shot img { transform: scale(1.04); }
+
+  .badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #06210f;
+    background: #6cf0a8;
+    box-shadow: 0 4px 14px -4px rgba(108, 240, 168, 0.7);
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.75;
+  }
+
+  .body {
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    flex-wrap: wrap;
+  }
+  .title-row h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 650;
+    letter-spacing: -0.005em;
+  }
+  .title-row .sub {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .desc {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--muted);
+    flex: 1;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .tag {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    color: color-mix(in srgb, var(--accent) 78%, #ffffff);
+    background: color-mix(in srgb, var(--accent) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  }
+
+  footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px 32px;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--text); text-decoration: underline; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card, .shot img { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="eyebrow">Three.js · 纯前端 · 零外部资源</div>
+    <h1>七个<em>3D 小游戏</em>，一个入口</h1>
+    <p class="lede">
+      全部用 Three.js 实时渲染，几何体与贴图都在运行时生成，不加载任何外部模型或图片。
+      双击就能玩的单文件版本与这里的在线版本是同一份代码，胜负判定与手感一致。
+    </p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <main class="grid" id="grid"></main>
+
+  <footer>
+    <span id="foot-left">在线版本部署在自建 NAS 上</span>
+    <span>
+      <a href="#" id="link-src">各游戏源码在 Gitea</a>
+    </span>
+  </footer>
+
+</div>
+
+<!--GAMES_DATA-->
+<!--MOUNT-PREFIX-->
+
+<script>
+(() => {
+  /**
+   * 挂载前缀。合集可能挂在域名根（端口访问），也可能挂在 /app/<appname>
+   * （fnOS 统一网关）。真实值由服务端在页面底部那段占位注释处注入，
+   * 这里读它而不是自己猜路径，避免端口与网关两种访问方式链接不一致。
+   */
+  const PREFIX = (window.__GAMES_PREFIX__ || '').replace(/\/$/, '');
+  const GAMES = window.__GAMES_DATA__ || [];
+
+  /** 站内路径 → 当前挂载前缀下的可访问 URL。 */
+  const href = (p) => {
+    const rel = p.replace(/^\//, '');
+    return (PREFIX ? PREFIX + '/' : './') + rel;
+  };
+
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+
+  /* ── 统计条 ───────────────────────────────────────────────── */
+  const stats = document.getElementById('stats');
+  [
+    ['7', '个可玩游戏'],
+    [String(GAMES.filter((g) => g.online).length), '个支持联机'],
+    ['0', '份外部资源'],
+    ['单文件', '也可离线双击', true],
+  ].forEach(([big, label, isText]) => {
+    const s = el('div', 'stat');
+    const b = el('b', isText ? 'is-text' : null, big);
+    s.append(b, el('span', null, label));
+    stats.append(s);
+  });
+
+  /* ── 游戏卡片 ─────────────────────────────────────────────── */
+  const grid = document.getElementById('grid');
+  for (const g of GAMES) {
+    const card = document.createElement('a');
+    card.className = 'card';
+    card.href = href(g.path);
+    card.style.setProperty('--accent', g.accent || '#7aa2ff');
+
+    const shot = el('div', 'shot');
+    const img = document.createElement('img');
+    img.src = href(g.cover);
+    img.alt = `${g.title} 截图`;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    shot.append(img);
+    if (g.online) shot.append(el('span', 'badge', '双人联机'));
+
+    const body = el('div', 'body');
+    const titleRow = el('div', 'title-row');
+    titleRow.append(el('h2', null, g.title), el('span', 'sub', g.subtitle || ''));
+    body.append(titleRow, el('p', 'desc', g.desc));
+
+    if (g.tags?.length) {
+      const tags = el('div', 'tags');
+      for (const t of g.tags) tags.append(el('span', 'tag', t));
+      body.append(tags);
+    }
+
+    card.append(shot, body);
+    grid.append(card);
+  }
+
+  /* ── 页脚 ─────────────────────────────────────────────────── */
+  const repo = GAMES.find((g) => g.repo)?.repo;
+  if (repo) {
+    const link = document.getElementById('link-src');
+    link.href = repo;
+    link.target = '_blank';
+    link.rel = 'noopener';
+  } else {
+    document.getElementById('link-src').remove();
+  }
+})();
+</script>
+</body>
+</html>

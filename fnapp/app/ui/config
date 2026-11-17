@@ -1,0 +1,17 @@
+{
+  ".url": {
+    "3d-games.main": {
+      "title": "3D 游戏合集",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/3d-games",
+      "gatewaySocket": "app.sock",
+      "url": "/app/3d-games",
+      "allUsers": true,
+      "control": {
+        "accessPerm": "readonly"
+      }
+    }
+  }
+}
