@@ -45,6 +45,7 @@ let elapsed = 0;
 let startedAt = 0;
 let timerRunning = false;
 let started = false;
+let paused = false;
 let pendingSeed = null;
 
 const bestTable = loadBest();
@@ -89,11 +90,13 @@ function startLevel(key, seed, keepView = false) {
   elapsed = 0;
   timerRunning = false;
   started = false;
+  paused = false;
   pendingSeed = null;
   lastClick = null;
 
   ui.hideMenu();
   ui.hideResult();
+  ui.hidePause();
   ui.showHud(true);
   ui.setLevel(key, lvl.name);
   ui.setBest(bestTable[key]);
@@ -109,7 +112,9 @@ function goMenu() {
   state = 'menu';
   lastClick = null;
   timerRunning = false;
+  paused = false;
   ui.hideResult();
+  ui.hidePause();
   ui.showMenu(
     pendingSeed
       ? `已载入挑战种子 ${pendingSeed}。选一档难度即可开局；首击位置不同，雷位会有差异。`
@@ -143,6 +148,51 @@ function stopTimer() {
   if (!timerRunning) return;
   elapsed = performance.now() - startedAt;
   timerRunning = false;
+}
+
+/**
+ * 暂停 / 继续（Esc 与 P 共用，也接暂停面板的「继续」按钮）。
+ *
+ * 计时的做法：不变量是「`elapsed` 是权威值，`startedAt` 只是这次计时的基准」。
+ * 暂停 = stopTimer()，把 performance.now() - startedAt 写回 elapsed；
+ * 恢复 = startTimer()，把 startedAt 重新定成 now - elapsed。
+ * 于是暂停这段墙钟时间天然落在两次基准之间、不会被计入，
+ * **不需要另外累计暂停时长**，也**不需要停 rAF**（画面继续渲染）。
+ *
+ * 为什么不靠 rAF 累加 dt：后台标签页 rAF 会被节流到约 1fps，
+ * 累加 dt 会让计时走慢。这里始终用 performance.now() 差值，与帧率无关。
+ */
+function setPaused(next) {
+  if (state !== 'playing' || !game || game.isOver) return;
+  if (paused === next) return;
+
+  paused = next;
+  if (paused) {
+    stopTimer();
+    ui.setClock(elapsed);
+    drag = null;
+    board.hideHover();
+    ui.showPause();
+    sound.click();
+  } else {
+    ui.hidePause();
+    // 只有本局已经开始计时（首次挖开过）才恢复走表；
+    // 未开局时暂停再继续，应该仍然是 0:00 等着首击。
+    if (started) startTimer();
+    sound.click();
+  }
+}
+
+function togglePause() {
+  setPaused(!paused);
+}
+
+/** 静音开关：与 HUD 上 ♪ 按钮走同一条路径。 */
+function toggleSound() {
+  sound.setMuted(!sound.muted);
+  saveMuted(sound.muted);
+  ui.setSoundMuted(sound.muted);
+  if (!sound.muted) sound.click();
 }
 
 function reveal(index) {
@@ -241,7 +291,7 @@ function finishGame(won) {
 }
 
 function doUndo() {
-  if (state !== 'playing') return;
+  if (!canPlay()) return;
   if (!game.undo()) {
     ui.toast(game.isOver ? '本局已结束，不能撤销' : '没有可撤销的挖开记录');
     return;
@@ -253,7 +303,7 @@ function doUndo() {
 }
 
 function doHint() {
-  if (state !== 'playing') return;
+  if (!canPlay()) return;
   const h = game.hint();
   if (!h) {
     ui.toast(game.isOver ? '本局已结束' : '提示次数已用完');
@@ -293,6 +343,11 @@ function shareLink() {
 }
 
 // ---------------------------------------------------------------- 输入
+
+/** 现在能否对棋盘下操作：对局中、未结束、且没被暂停。 */
+function canPlay() {
+  return state === 'playing' && !!game && !game.isOver && !paused;
+}
 
 let drag = null;
 let hoverRaf = 0;
@@ -400,6 +455,53 @@ canvas.addEventListener(
   { passive: false },
 );
 
+/**
+ * 键盘：Esc/P 暂停、R 重开本局、M 静音（《设计语言规范》§二）。
+ *
+ * 本游戏原来是纯鼠标的（pointerdown/move/up、wheel、contextmenu）。合集里
+ * 其余 6 个游戏都能用键盘，只有它不能，手感会明显断裂，所以必须补上。
+ *
+ * 两个细节：
+ *   1. 命中判定用 e.code 而不是 e.key——键盘布局不同（如俄文/中文输入法
+ *      激活时）e.key 会变，e.code 始终是物理键位。
+ *   2. 输入框聚焦时不拦截，否则将来若加种子输入框，按 R 会连带着重开一局。
+ */
+function isTypingTarget(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (isTypingTarget(e.target)) return;
+
+  switch (e.code) {
+    case 'Escape':
+    case 'KeyP':
+      // 已在菜单/结算页时不做事（那两个页面本来就不计时）
+      if (state !== 'playing') return;
+      e.preventDefault();
+      togglePause();
+      break;
+
+    case 'KeyR':
+      if (state !== 'playing') return;
+      e.preventDefault();
+      // 重开本局保留当前视角（与 HUD 上的 ↻ 按钮、暂停面板的「重开」同一路径）
+      startLevel(levelKey, null, true);
+      break;
+
+    case 'KeyM':
+      e.preventDefault();
+      toggleSound();
+      break;
+
+    default:
+      break;
+  }
+});
+
 // ---------------------------------------------------------------- UI 回调
 
 ui.on('onLevel', (key) => startLevel(key, pendingSeed))
@@ -409,11 +511,8 @@ ui.on('onLevel', (key) => startLevel(key, pendingSeed))
   .on('onUndo', doUndo)
   .on('onHint', doHint)
   .on('onShare', shareLink)
-  .on('onSound', () => {
-    sound.setMuted(!sound.muted);
-    saveMuted(sound.muted);
-    ui.setSoundMuted(sound.muted);
-  })
+  .on('onSound', toggleSound)
+  .on('onResume', () => setPaused(false))
   .on('onMenu', () => {
     if (state === 'playing') goMenu();
   })

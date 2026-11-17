@@ -5,15 +5,15 @@
    ========================================================================== */
 
 :root {
-  --bg: #0b0907;
+  --bg: #0a0d16;
   --panel: rgba(28, 21, 15, 0.94);
   --copper: #c8863c;
   --copper-2: #e8b06a;
   --copper-dim: rgba(200, 134, 60, 0.24);
-  --text: #e9dcc8;
+  --text: #e8edf7;
   --muted: #a08f77;
   --danger: #d9564a;
-  --font: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -145,7 +145,7 @@ html, body {
   height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 8px; /* 规范：图标按钮用 --radius-sm，不留 50% 圆形 */
   border: 1px solid var(--copper-dim);
   background: rgba(20, 15, 11, 0.6);
   color: var(--copper-2);
@@ -317,6 +317,26 @@ h1 {
   text-align: center;
 }
 
+/* 暂停面板：与结算面板同构，只是更矮 */
+.pause-panel {
+  width: min(460px, 100%);
+  text-align: center;
+}
+
+.pause-panel h2 {
+  margin: 8px 0 10px;
+  font-size: 32px;
+  letter-spacing: 0.08em;
+  color: var(--copper-2);
+}
+
+.pause-note {
+  margin: 0 0 24px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
 .result-panel h2 {
   margin: 8px 0 26px;
   font-size: 34px;
@@ -371,7 +391,7 @@ h1 {
 
 .btn {
   padding: 12px 24px;
-  border-radius: 999px;
+  border-radius: 12px; /* 规范：主/次按钮用 --radius，不再用胶囊 */
   border: 1px solid rgba(200, 134, 60, 0.4);
   background: rgba(200, 134, 60, 0.08);
   color: var(--text);

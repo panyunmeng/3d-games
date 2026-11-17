@@ -54,7 +54,22 @@
         <li><b>双击</b>数字或<b>中键</b>：旗数与数字相符时一次展开周围</li>
         <li>首击必定安全，0 格连锁展开</li>
         <li>撤销与提示各 3 次，用过即记为练习局，不计最佳成绩</li>
+        <li><b>Esc / P</b> 暂停，<b>R</b> 重开本局，<b>M</b> 静音</li>
       </ul>
+    </div>
+  </section>
+
+  <section id="pause" class="overlay hidden">
+    <div class="panel pause-panel">
+      <p class="eyebrow">PAUSED</p>
+      <h2>已暂停</h2>
+      <p class="pause-note">计时已冻结，继续后接着走</p>
+
+      <div class="actions">
+        <button class="btn primary" id="btn-resume" type="button">继续</button>
+        <button class="btn" id="btn-pause-restart" type="button">重开</button>
+        <button class="btn ghost" id="btn-pause-menu" type="button">回到菜单</button>
+      </div>
     </div>
   </section>
 
@@ -72,7 +87,7 @@
       <p class="result-note hidden" id="result-note"></p>
 
       <div class="actions">
-        <button class="btn primary" id="btn-again" type="button">再来一局</button>
+        <button class="btn primary" id="btn-again" type="button">重开</button>
         <button class="btn" id="btn-change" type="button">换难度</button>
         <button class="btn ghost" id="btn-share-result" type="button">复制挑战链接</button>
       </div>

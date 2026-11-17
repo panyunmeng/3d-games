@@ -18,6 +18,7 @@ export class UI {
       menu: document.getElementById('menu'),
       levels: document.getElementById('levels'),
       seedNote: document.getElementById('seed-note'),
+      pause: document.getElementById('pause'),
       result: document.getElementById('result'),
       resultKicker: document.getElementById('result-kicker'),
       resultTitle: document.getElementById('result-title'),
@@ -76,6 +77,9 @@ export class UI {
     click('btn-again', 'onAgain');
     click('btn-change', 'onChange');
     click('btn-share-result', 'onShare');
+    click('btn-resume', 'onResume');
+    click('btn-pause-restart', 'onRestart');
+    click('btn-pause-menu', 'onMenu');
   }
 
   on(name, fn) {
@@ -131,7 +135,8 @@ export class UI {
   setSoundMuted(muted) {
     this.el.btnSound.textContent = muted ? '⨯' : '♪';
     this.el.btnSound.classList.toggle('muted', muted);
-    this.el.btnSound.title = muted ? '音效已关闭' : '音效已开启';
+    // 按钮上写动作（规范 §三）：已静音时点它=取消静音，反之=静音
+    this.el.btnSound.title = muted ? '取消静音（M）' : '静音（M）';
   }
 
   showHud(show) {
@@ -175,6 +180,19 @@ export class UI {
 
   hideResult() {
     this.el.result.classList.add('hidden');
+  }
+
+  showPause() {
+    this.el.pause.classList.remove('hidden');
+  }
+
+  hidePause() {
+    this.el.pause.classList.add('hidden');
+  }
+
+  /** 暂停面板是否可见（键盘处理用，避免重复开关时状态漂移）。 */
+  isPaused() {
+    return !this.el.pause.classList.contains('hidden');
   }
 
   toast(text, ms = 1800) {
