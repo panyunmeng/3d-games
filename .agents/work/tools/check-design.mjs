@@ -100,6 +100,13 @@ const PROBE = `(() => {
     return r.width > 20 && r.height > 12 && getComputedStyle(b).visibility !== 'hidden';
   });
   const btnCs = btn ? getComputedStyle(btn) : null;
+  // 所有可见按钮的圆角集合：统一后应只剩 8px / 12px / 999px 三档
+  const radii = [...new Set([...document.querySelectorAll('button')]
+    .filter((b) => { const r = b.getBoundingClientRect(); return r.width > 16 && r.height > 12; })
+    .map((b) => getComputedStyle(b).borderTopLeftRadius))].sort();
+  // 文案合规性：这些词不该出现
+  const text = (document.body.innerText || '');
+  const banned = ['重新开始', '恢复游戏', '进入游戏'].filter((w) => text.includes(w));
   return JSON.stringify({
     tokens: {
       bg: v('--bg'), text: v('--text'), accent: v('--accent'),
@@ -110,6 +117,8 @@ const PROBE = `(() => {
     bodyBg: getComputedStyle(document.body).backgroundColor,
     textFont: textFont.slice(0, 90),
     btn: btnCs ? { radius: btnCs.borderRadius, font: btnCs.fontFamily.slice(0, 60) } : null,
+    btnRadii: radii.join(' '),
+    bannedWords: banned.join(' '),
   });
 })()`;
 
@@ -139,6 +148,10 @@ const DIMENSIONS = [
   ['实际文字字体', (r) => r.textFont],
   ['body 背景色', (r) => r.bodyBg],
   ['主按钮圆角', (r) => r.btn?.radius ?? '（无按钮）'],
+  // 统一后所有按钮圆角应落在 8px/12px/999px 三档之内
+  ['按钮圆角取值集合', (r) => r.btnRadii || '（无按钮）'],
+  // 规范禁用词，出现即为不合格
+  ['禁用文案（应为空）', (r) => (r.bannedWords ? `含：${r.bannedWords}` : '（无）')],
 ];
 
 console.log(`\n统一设计语言检查 · ${BASE}\n${'='.repeat(74)}\n`);
