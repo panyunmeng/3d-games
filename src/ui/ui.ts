@@ -26,9 +26,83 @@ export interface UiCallbacks {
   onToggleDifficulty: () => void;
   onToggleSfx: () => void;
   onToggleMusic: () => void;
+  /** 触屏左摇杆归一化向量：x 右为正、y 下为正，已夹到 ±1。 */
+  onTouchMove: (x: number, y: number) => void;
+  /** 触屏右摇杆归一化向量，同样 x 右为正、y 下为正。 */
+  onTouchAim: (x: number, y: number) => void;
+  /** HUD 暂停按钮（触屏没有 Esc）。 */
+  onPause: () => void;
+  /** HUD 静音按钮（触屏没有 M）。 */
+  onToggleMute: () => void;
 }
 
 const DIFF_LABEL: Record<DifficultyId, string> = { classic: '经典', casual: '休闲' };
+
+/** 摇杆死区：小于这个半径的抖动忽略，避免手指微动带来持续转向。 */
+const STICK_DEAD = 0.16;
+
+/**
+ * 单根虚拟摇杆。用 Pointer Events 支持多点触控：每根摇杆只绑定自己的 pointerId，
+ * 左摇杆（移动）和右摇杆（瞄准）可以同时被两根拇指操作而互不覆盖。
+ * 只把「归一化向量」交给上层，不碰 PlayerInput / 仿真层——输入语义仍由 app 决定。
+ */
+class Stick {
+  x = 0;
+  y = 0;
+  private pointerId: number | null = null;
+
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly knob: HTMLElement,
+    private readonly onChange: (x: number, y: number) => void,
+  ) {
+    root.addEventListener('pointerdown', (ev) => this.down(ev));
+    root.addEventListener('pointermove', (ev) => this.move(ev));
+    root.addEventListener('pointerup', (ev) => this.up(ev));
+    root.addEventListener('pointercancel', (ev) => this.up(ev));
+    root.addEventListener('lostpointercapture', (ev) => this.up(ev));
+  }
+
+  private down(ev: PointerEvent): void {
+    if (this.pointerId !== null) return;
+    this.pointerId = ev.pointerId;
+    this.root.setPointerCapture(ev.pointerId);
+    this.apply(ev);
+    ev.preventDefault();
+  }
+
+  private move(ev: PointerEvent): void {
+    if (ev.pointerId !== this.pointerId) return;
+    this.apply(ev);
+    ev.preventDefault();
+  }
+
+  private up(ev: PointerEvent): void {
+    if (ev.pointerId !== this.pointerId) return;
+    this.pointerId = null;
+    this.x = 0;
+    this.y = 0;
+    this.knob.style.transform = '';
+    this.onChange(0, 0);
+    ev.preventDefault();
+  }
+
+  private apply(ev: PointerEvent): void {
+    const r = this.root.getBoundingClientRect();
+    const radius = Math.max(1, r.width / 2 - 12);
+    let dx = (ev.clientX - (r.left + r.width / 2)) / radius;
+    let dy = (ev.clientY - (r.top + r.height / 2)) / radius;
+    const len = Math.hypot(dx, dy);
+    if (len > 1) {
+      dx /= len;
+      dy /= len;
+    }
+    this.x = Math.abs(dx) < STICK_DEAD ? 0 : dx;
+    this.y = Math.abs(dy) < STICK_DEAD ? 0 : dy;
+    this.knob.style.transform = `translate(${this.x * radius}px, ${this.y * radius}px)`;
+    this.onChange(this.x, this.y);
+  }
+}
 
 /** 所有界面与 HUD 的 DOM 层。3D 之外的交互全部在这里，渲染层不碰 DOM。 */
 export class Ui {
@@ -38,9 +112,13 @@ export class Ui {
   private toastTimer = 0;
   private roomCode: string | null = null;
   private hudRefs: Record<string, HTMLElement> = {};
+  private readonly touchLayer: HTMLDivElement;
+  private moveStick: Stick | null = null;
+  private aimStick: Stick | null = null;
+  private touchMode = false;
 
   constructor(
-    root: HTMLElement,
+    private readonly root: HTMLElement,
     private readonly cb: UiCallbacks,
   ) {
     const layer = document.createElement('div');
@@ -67,6 +145,10 @@ export class Ui {
           <span class="score" data-ref="score">0</span>
           <span class="muted"><span class="label">最高</span> <span data-ref="best">0</span></span>
         </div>
+        <div class="hud-tools">
+          <button class="hud-icon-btn" data-act="mute" aria-label="静音开关" title="静音 (M)">♪</button>
+          <button class="hud-icon-btn" data-act="pause" aria-label="暂停" title="暂停 (Esc)">Ⅱ</button>
+        </div>
       </div>
       <div class="hud-bottom"><span class="hint" data-ref="hint"></span></div>
     `;
@@ -76,6 +158,32 @@ export class Ui {
       const key = el.dataset.ref as string;
       this.hudRefs[key] = el;
     });
+    // HUD 的静音/暂停按钮独立于全屏 screen，单独接点击（screen 此时是隐藏的）。
+    this.hud.addEventListener('click', (ev) => {
+      const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-act]');
+      if (!btn) return;
+      if (btn.dataset.act === 'pause') this.cb.onPause();
+      else if (btn.dataset.act === 'mute') this.cb.onToggleMute();
+    });
+
+    // 触屏双摇杆层：默认隐藏，首触屏后由 setTouchMode(true) 显示；桌面永不出现。
+    this.touchLayer = document.createElement('div');
+    this.touchLayer.className = 'touch-layer hidden';
+    this.touchLayer.innerHTML = `
+      <div class="stick stick-move" data-stick="move"><div class="stick-knob"></div></div>
+      <div class="stick stick-aim" data-stick="aim"><div class="stick-knob"></div></div>
+    `;
+    layer.appendChild(this.touchLayer);
+    this.moveStick = new Stick(
+      this.touchLayer.querySelector<HTMLElement>('[data-stick="move"]')!,
+      this.touchLayer.querySelector<HTMLElement>('[data-stick="move"] .stick-knob')!,
+      (x, y) => this.cb.onTouchMove(x, y),
+    );
+    this.aimStick = new Stick(
+      this.touchLayer.querySelector<HTMLElement>('[data-stick="aim"]')!,
+      this.touchLayer.querySelector<HTMLElement>('[data-stick="aim"] .stick-knob')!,
+      (x, y) => this.cb.onTouchAim(x, y),
+    );
 
     this.screen = document.createElement('div');
     this.screen.className = 'screen hidden';
@@ -161,6 +269,36 @@ export class Ui {
 
   setHudVisible(visible: boolean): void {
     this.hud.classList.toggle('hidden', !visible);
+    this.syncTouchLayer();
+  }
+
+  /**
+   * 切到触屏模式：显示双摇杆与 HUD 按钮，桌面输入不受影响。
+   * 只在首次检测到真触摸时调用，避免桌面误触发。
+   */
+  setTouchMode(on: boolean): void {
+    if (this.touchMode === on) return;
+    this.touchMode = on;
+    this.root.classList.toggle('is-touch', on);
+    this.syncTouchLayer();
+  }
+
+  isTouchMode(): boolean {
+    return this.touchMode;
+  }
+
+  /** 摇杆只在「触屏模式 + HUD 可见」时出现，菜单/结算全屏面板盖住时不干扰。 */
+  private syncTouchLayer(): void {
+    const show = this.touchMode && !this.hud.classList.contains('hidden');
+    this.touchLayer.classList.toggle('hidden', !show);
+  }
+
+  /** 静音按钮图标与当前音效状态同步。 */
+  syncMuteButton(sfxOn: boolean): void {
+    const btn = this.hud.querySelector<HTMLElement>('[data-act="mute"]');
+    if (!btn) return;
+    btn.textContent = sfxOn ? '♪' : '✕';
+    btn.classList.toggle('muted-off', !sfxOn);
   }
 
   toast(text: string): void {
@@ -204,7 +342,7 @@ export class Ui {
           <div class="stat"><div class="k">通关次数</div><div class="v">${save.wins}</div></div>
         </div>
         <div class="section-title">操作</div>
-        <div class="keys">
+        <div class="keys keyboard-keys">
           <div><b>W A S D</b> 前进后退 / 车体转向</div>
           <div><b>鼠标移动</b> 炮塔 360° 瞄准</div>
           <div><b>左键</b> 开火</div>
@@ -212,7 +350,12 @@ export class Ui {
           <div><b>Esc</b> 暂停</div>
           <div><b>M</b> 静音</div>
         </div>
-        <div class="desktop-only-note">需要用键盘与鼠标操作；点击画面即可锁定鼠标，按 Esc 解锁。</div>
+        <div class="keys touch-keys">
+          <div><b>左摇杆</b> 前进后退 / 车体转向</div>
+          <div><b>右摇杆</b> 炮塔瞄准，推动即开火</div>
+          <div><b>右上角按钮</b> 暂停 / 静音</div>
+        </div>
+        <div class="desktop-only-note">电脑：点击画面即可锁定鼠标，按 Esc 解锁。</div>
       </div>
     `);
   }
@@ -322,13 +465,15 @@ export class Ui {
     `);
   }
 
-  /** 鼠标锁定状态变化时更新底部提示。 */
+  /** 鼠标锁定状态变化时更新底部提示；触屏模式显示摇杆提示。 */
   setPointerLocked(locked: boolean): void {
     const hint = this.hudRefs.hint;
     if (!hint) return;
-    hint.textContent = locked
-      ? 'WASD 移动 · 鼠标转炮塔 · 左键开火 · 滚轮缩放 · Esc 暂停'
-      : '点击画面锁定鼠标后即可瞄准';
+    hint.textContent = this.touchMode
+      ? '左摇杆移动 · 右摇杆瞄准开火 · 右上角暂停'
+      : locked
+        ? 'WASD 移动 · 鼠标转炮塔 · 左键开火 · 滚轮缩放 · Esc 暂停'
+        : '点击画面锁定鼠标后即可瞄准';
     hint.classList.remove('faded');
   }
 

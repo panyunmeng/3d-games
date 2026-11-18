@@ -7,6 +7,9 @@
   --warn: #e8623a;
   --text: #e8edf7;
   --muted: #9aa79a;
+  /* 独立 dist 打开时平台不会注入设计令牌，这里补默认值（平台注入版会覆盖）。 */
+  --radius: 12px;
+  --radius-lg: 18px;
 }
 
 * {
@@ -18,17 +21,29 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  width: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
 
 #app {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100dvh;
+  height: 100vh; /* 老浏览器兜底；支持 dvh 的用上面一行 */
+}
+
+@supports (height: 100dvh) {
+  #app {
+    height: 100dvh;
+  }
 }
 
 #app > canvas {
@@ -410,4 +425,262 @@ body {
   margin-top: 18px;
   color: var(--muted);
   font-size: 12.5px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   移动端适配（触屏双摇杆 + 响应式 HUD / 面板）
+   设计约束（来自容器 mobile-spec）：
+     1. 可点元素 ≥44px，含 HUD 图标；
+     2. 右下 12px 让给平台注入的「返回平台」按钮；
+     3. 用 100dvh + env(safe-area-inset-*)，不横向滚动；
+     4. 桌面输入/布局完全不变（触屏层默认隐藏，仅真触摸后出现）。
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── HUD 右上工具按钮（暂停 / 静音） ── */
+.hud-tools {
+  display: none; /* 桌面用键盘 Esc/M，不需要按钮；触屏模式由 .is-touch 打开 */
+  gap: 8px;
+  margin-left: auto;
+}
+.is-touch .hud-tools {
+  display: flex;
+}
+
+.hud-icon-btn {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: rgba(14, 20, 24, 0.82);
+  color: var(--accent-2);
+  font-size: 22px;
+  font-family: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  backdrop-filter: blur(6px);
+}
+.hud-icon-btn.muted-off {
+  color: var(--muted);
+}
+.hud-icon-btn:active {
+  transform: scale(0.94);
+}
+
+/* ── 触屏双摇杆 ── */
+.touch-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none; /* 只有两根摇杆自身接收事件 */
+  z-index: 12;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.stick {
+  position: absolute;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(122, 192, 67, 0.12) 0%, rgba(10, 14, 18, 0.55) 70%);
+  border: 2px solid rgba(122, 192, 67, 0.38);
+  box-shadow: inset 0 0 24px rgba(122, 192, 67, 0.08), 0 6px 20px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  touch-action: none; /* 关键：不让页面滚动/缩放吃掉拖动 */
+}
+.stick-move {
+  left: calc(20px + env(safe-area-inset-left, 0px));
+}
+.stick-aim {
+  right: calc(20px + env(safe-area-inset-right, 0px));
+  border-color: rgba(245, 197, 66, 0.42);
+  background: radial-gradient(circle, rgba(245, 197, 66, 0.12) 0%, rgba(10, 14, 18, 0.55) 70%);
+  box-shadow: inset 0 0 24px rgba(245, 197, 66, 0.08), 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  margin: -28px 0 0 -28px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #cbe89e, #7ac043 60%, #4f7f2a);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  /* 摇杆头的位移由 JS 写 transform；这里只定义初始位置 */
+}
+.stick-aim .stick-knob {
+  background: radial-gradient(circle at 40% 35%, #ffe8a0, #f5c542 60%, #b8891a);
+}
+/* 提示只有 HUD 里 .hint 一处文案源（.touch-tip 已删，避免两份文本叠印）。
+   触屏下抬到摇杆上沿之上（摇杆顶 y=584），与底部平台返回按钮也让开。 */
+.is-touch .hud-bottom {
+  bottom: calc(240px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── 面板：按钮一律 ≥44px，窄屏收边距、可滚动 ── */
+.panel .btn,
+.panel .btn.small {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 12px 18px;
+  font-size: 15px;
+}
+.input {
+  min-height: 48px;
+}
+
+/* 面板内边距在窄屏收紧，内容超出可滚动（不裁切） */
+@media (max-width: 520px) {
+  .screen {
+    padding: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    align-items: flex-start;
+  }
+  .panel {
+    width: 100%;
+    max-height: 100%;
+    padding: 18px 16px 22px;
+    -webkit-overflow-scrolling: touch;
+    overflow: auto;
+  }
+  .title {
+    font-size: clamp(26px, 8vw, 34px);
+  }
+  .subtitle {
+    font-size: 12.5px;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    margin: 14px 0 8px;
+  }
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .stat {
+    padding: 10px 12px;
+  }
+  .stat .v {
+    font-size: 18px;
+  }
+  .keys {
+    grid-template-columns: 1fr;
+    font-size: 12.5px;
+  }
+}
+
+/* 触屏模式：桌面键盘说明隐藏，只留触屏说明 */
+.is-touch .keyboard-keys {
+  display: none;
+}
+.touch-keys {
+  display: none;
+}
+.is-touch .touch-keys {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.is-touch .touch-keys b {
+  color: var(--text);
+}
+.is-touch .desktop-only-note {
+  display: none;
+}
+
+/* ── HUD 顶栏：窄屏压缩字号与内边距，工具按钮靠右且不越界 ── */
+@media (max-width: 520px) {
+  .hud-top {
+    gap: 6px;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 0;
+  }
+  .hud-panel {
+    gap: 8px;
+    padding: 6px 9px;
+    font-size: 13px;
+    border-radius: 10px;
+  }
+  .hud-panel .label {
+    font-size: 11px;
+  }
+  .hud-bottom {
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .hint {
+    font-size: 11px;
+    padding: 5px 10px;
+    max-width: 92vw;
+    white-space: normal;
+    text-align: center;
+  }
+  .toast {
+    top: 64px;
+    max-width: 90vw;
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* ── 横屏（844×390）：收紧纵向间距，摇杆下移但避开底部平台按钮 ── */
+@media (orientation: landscape) and (max-height: 500px) {
+  .stick {
+    width: 108px;
+    height: 108px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .stick-knob {
+    width: 46px;
+    height: 46px;
+    margin: -23px 0 0 -23px;
+  }
+  /* 横屏摇杆顶 y≈262，提示抬到它上方，且避开底部平台返回按钮 */
+  .is-touch .hud-bottom {
+    bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+  }
+  .screen {
+    padding: 8px;
+  }
+  .panel {
+    padding: 14px 18px 16px;
+    max-height: 96%;
+  }
+  .subtitle {
+    margin-bottom: 10px;
+  }
+  .section-title {
+    margin: 10px 0 6px;
+  }
+  .stats {
+    margin: 10px 0 4px;
+  }
+  .stat .v {
+    font-size: 16px;
+  }
+  .keys {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+}
+
+/* ── 桌面回归：保持原有大按钮手感，工具按钮即便误显示也不超限 ── */
+@media (min-width: 521px) {
+  .panel .btn,
+  .panel .btn.small {
+    min-height: 44px;
+  }
 }

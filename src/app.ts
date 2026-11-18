@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import { Sound } from './audio/sound';
+import {
+  aimStickToFire,
+  aimStickToOffset,
+  moveStickToMove,
+  moveStickToTurn,
+  stickDeadzone,
+} from './inputMapping';
 import { getLevel, LEVEL_COUNT } from './levels';
 import { CameraRig } from './render/cameraRig';
 import { createWorldScene, type WorldScene } from './render/scene';
@@ -52,6 +59,13 @@ export class Game {
   private pointerLocked = false;
   private wasAlive = true;
 
+  /** 触屏双摇杆状态：只存归一化数值，映射成 PlayerInput 的逻辑与键盘共用 buildInput。 */
+  private touchMoveX = 0;
+  private touchMoveY = 0;
+  private touchAimX = 0;
+  private touchAimY = 0;
+  private touchFire = false;
+
   private accumulator = 0;
   private lastFrame = 0;
   private hintTimer = 9;
@@ -94,6 +108,21 @@ export class Game {
       onToggleDifficulty: () => this.toggleDifficulty(),
       onToggleSfx: () => this.toggleSfx(),
       onToggleMusic: () => this.toggleMusic(),
+      // 触屏摇杆回调：只记录归一化向量，转 PlayerInput 仍走 buildInput（与键盘同一条路）。
+      onTouchMove: (x, y) => {
+        const v = stickDeadzone({ x, y });
+        this.touchMoveX = v.x;
+        this.touchMoveY = v.y;
+      },
+      onTouchAim: (x, y) => {
+        const v = stickDeadzone({ x, y });
+        this.touchAimX = v.x;
+        this.touchAimY = v.y;
+        // 瞄准即开火：推动右摇杆等价于按住左键（同一个 fire 字段，无新输入语义）。
+        this.touchFire = aimStickToFire(v);
+      },
+      onPause: () => this.onEscape(),
+      onToggleMute: () => this.toggleMute(),
     });
 
     this.applyAudioSettings();
@@ -183,6 +212,17 @@ export class Game {
   private frame(now: number): void {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
+
+    if (this.mode === 'playing' || this.mode === 'netPlaying') {
+      // 右摇杆是一个「相对车体的方向」：右推=车右侧、上推=车前方，和鼠标一样只改
+      // turretOffset。相机在车后、屏幕右 = 世界 -x；而 yaw 增大把炮口转向 +x（屏幕左）。
+      // 故右推（x>0）对应负的 yaw 偏移：atan2(-x, -y)。y 向上为负→车头正前方偏移 0。
+      // 结果仍是 aim = yaw + turretOffset，与键盘/鼠标共用同一字段，仿真层无从分辨来源。
+      if (this.touchAimX !== 0 || this.touchAimY !== 0) {
+        const offset = aimStickToOffset({ x: this.touchAimX, y: this.touchAimY });
+        if (offset !== null) this.turretOffset = wrapAngle(offset);
+      }
+    }
 
     if (this.mode === 'playing') {
       if (this.autopilot) this.demoDrive();
@@ -366,7 +406,9 @@ export class Game {
       score: slot.score,
       best: Math.max(this.save.highScore, slot.score),
       enemiesLeft: this.netLive ? (this.net?.enemiesLeft ?? 0) : totalEnemiesLeft(world),
-      hint: 'WASD 移动 · 鼠标转炮塔 · 左键开火 · 滚轮缩放 · Esc 暂停',
+      hint: this.ui.isTouchMode()
+        ? '左摇杆移动 · 右摇杆瞄准开火 · 右上角暂停'
+        : 'WASD 移动 · 鼠标转炮塔 · 左键开火 · 滚轮缩放 · Esc 暂停',
     });
   }
 
@@ -386,6 +428,16 @@ export class Game {
   /* ── 输入 ─────────────────────────────────────────────────────── */
 
   private bindInput(): void {
+    // 首次真实触摸才切到触屏模式：桌面（哪怕有触摸屏）不显示摇杆，避免退化。
+    // 用 once 的 pointerdown（pointerType=touch）作为触发，比媒体查询更可靠。
+    window.addEventListener(
+      'pointerdown',
+      (ev) => {
+        if (ev.pointerType === 'touch') this.enableTouchMode();
+      },
+      { once: false },
+    );
+
     window.addEventListener('keydown', (ev) => {
       const target = ev.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
@@ -460,16 +512,24 @@ export class Game {
   }
 
   private buildInput(): PlayerInput {
-    const forward = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
-    // A 左转 = yaw 增大（相机在车后，+yaw 把车头转向屏幕左侧）
-    const turn = (this.keys.has('KeyA') ? 1 : 0) - (this.keys.has('KeyD') ? 1 : 0);
+    // 键盘的 W/S 与左摇杆的 Y（上为负）映射成同一个 move 字段；取绝对值大者，
+    // 两种输入同时存在时也不会互相抵消。语义与键盘完全一致，仿真层无从分辨来源。
+    const keyForward = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
+    const touchForward = moveStickToMove(this.touchMoveY);
+    const forward = Math.abs(touchForward) > Math.abs(keyForward) ? touchForward : keyForward;
+    // A 左转 = yaw 增大（相机在车后，+yaw 把车头转向屏幕左侧）。
+    // 左摇杆 X（右为正）经 moveStickToTurn 映射：右推 turn=-1（顺时针/车头向右），与按 D 一致。
+    const keyTurn = (this.keys.has('KeyA') ? 1 : 0) - (this.keys.has('KeyD') ? 1 : 0);
+    const touchTurn = moveStickToTurn(this.touchMoveX);
+    const turn = Math.abs(touchTurn) > Math.abs(keyTurn) ? touchTurn : keyTurn;
     const tank = this.world ? playerTank(this.world, this.localPlayerId) : undefined;
     if (tank && tank.alive !== this.wasAlive) {
       this.wasAlive = tank.alive;
       if (tank.alive) this.turretOffset = 0;
     }
     const aim = tank ? wrapAngle(tank.yaw + this.turretOffset) : null;
-    return { move: forward, turn, aim, fire: this.fireHeld };
+    // fire：鼠标左键 与 右摇杆推动 共用同一字段，无「触屏专用」语义。
+    return { move: forward, turn, aim, fire: this.fireHeld || this.touchFire };
   }
 
   /** 演示自驾：找最近敌人，有视线就瞄准开火，没视线就开车去找。 */
@@ -553,6 +613,8 @@ export class Game {
   }
 
   private requestPointerLock(): void {
+    // 触屏下绝不请求指针锁定：手机上会失败，还可能吞掉后续 pointer 事件，导致摇杆失灵。
+    if (this.ui.isTouchMode()) return;
     // 指针锁定在嵌入式/无焦点窗口里会抛 WrongDocumentError 或返回被拒绝的 Promise；
     // 这里必须吃掉异常——它曾经把 requestAnimationFrame 主循环直接打断。
     try {
@@ -567,6 +629,14 @@ export class Game {
 
   private exitPointerLock(): void {
     if (document.pointerLockElement === this.canvas) document.exitPointerLock?.();
+  }
+
+  /** 首次触摸切换到触屏布局：显示摇杆、退出可能已锁定的鼠标、刷新提示。 */
+  private enableTouchMode(): void {
+    if (this.ui.isTouchMode()) return;
+    this.ui.setTouchMode(true);
+    this.exitPointerLock();
+    this.ui.setPointerLocked(false);
   }
 
   /* ── 模式切换 ─────────────────────────────────────────────────── */
@@ -724,6 +794,7 @@ export class Game {
     this.sound.setSfxEnabled(this.save.sfx);
     this.sound.setMusicEnabled(this.save.music);
     this.sound.setVolume(this.save.volume);
+    this.ui.syncMuteButton(this.save.sfx);
   }
 
   /* ── 联机 ─────────────────────────────────────────────────────── */
