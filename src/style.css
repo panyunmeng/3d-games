@@ -1195,10 +1195,12 @@ input[type="range"]::-webkit-slider-thumb {
     font-size: 12px;
   }
 
-  /* 下带：塔栏横向铺满；底部留 46px 给平台注入的「← 返回平台」（right/bottom 12px），
-     使塔卡不进入右下角那块 100×26px 区域 */
+  /* 下带：塔栏横向铺满；底部留 66px 给平台注入的「← 返回平台」。
+     实测平台按钮尺寸已由 28px 高改为 44px 高，锚点 right/bottom 12px，
+     在 375×812 占 x=266..363 / y=756..800；塔卡 bottom 必须 ≤756-8=748。
+     66px = 812-746，留 10px 间隙，满足留 8px 余量的裁决口径。 */
   .hud-bottom {
-    padding: 4px 8px calc(46px + env(safe-area-inset-bottom));
+    padding: 4px 8px calc(66px + env(safe-area-inset-bottom));
     align-items: flex-end;
   }
   .tower-bar {

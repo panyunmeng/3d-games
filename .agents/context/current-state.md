@@ -183,3 +183,47 @@
 
 - 竖屏 BOSS 血条/toast 顺延到 y214/y256，极端密集波次时仍可能和顶部预览叠字（均 pointer-events:none）。
 - 本会话模型不支持 `read_image`，遮挡结论仍是几何探针而非肉眼确认。
+
+## 2026-11-18 23:35 — 避让平台返回按钮（抬高塔卡行）
+
+### 原因（线上集成验收发现）
+
+平台侧把「← 返回平台」从 28px 高改成触屏 44px 高，锚点 `right:12px; bottom:12px`，
+在 375×812 实测占 `x=266..363, y=756..800`（97×44）。
+我上版只留了 46px 底部空白（56px 需求），激光塔卡 bottom=766 比按钮上沿 756 低 10px，
+两张右侧塔卡被压（电磁塔相交 10×10、激光塔 81×10）。
+
+### 改法
+
+`src/style.css` 竖屏媒体查询 `.hud-bottom` 底部 padding `46px → 66px`（含 safe-area）。
+66px = 812 - 746，把塔卡行整体上抬 20px。
+
+- 塔卡新 rect：`y=672, h=74, bottom=746`（h 不变，仍 ≥44px、单行不折行）
+- 按钮 rect：`x=266, y=756, w=97, h=44`
+- 不相交算式：`tower.bottom 746 + 8 = 754 <= back.y 756` ✓（间隙 10px，满足留 ≥8px 余量）
+
+连带核对（全部在塔卡新 top 672 之上，无叠）：
+`.wave-actions` bottom=658、`.sel-panel` bottom=652、`.hud-hint` y=184～209、
+敌人预览 y=154～178、toast y≈248、BOSS 血条 y=214——均不相交。
+横屏塔卡 x≤384 < 按钮 x=735，天然不交，未改横屏。
+
+### 验证
+
+- `pnpm typecheck`：无输出，退出 0。
+- `pnpm build`：成功，CSS 18.56 kB (gzip 4.60)、JS 652.15 kB (gzip 167.90)。
+- `pnpm tsx tools/balance.ts`：9 条结论与改前逐字一致（简单全通、普通全通/1～2 漏、困难第1/3关第8波失守）。
+- `mobile-check --enter 进战场`（改后立即跑）：3/3 PASS，minTap=50px、touch-action=none。
+- 平台 `backbtn-overlap.mjs` 自证由主代理统一跑（本代理遵守资源纪律未再开浏览器）；
+  本代理改前曾用 CDP 几何探针量得 `cardOverlaps:[]`（塔卡 bottom 746 < 按钮 y 756），
+  并把新 CSS 同步进 `build/www/games/td`（`node scripts/build.mjs --only=td`）。
+
+### 资源纪律
+
+本轮按容器 `.agents/constraints/resource-discipline.md`：浏览器脚本自 spawn 自 kill、profile 已删；
+按 lead 要求 `Get-Process chrome | Stop-Process -Force` 后复核 chrome 进程数 = 0。
+未 git commit/push；`src/game` 与 `src/data` 仍未改。
+
+### 已知不足
+
+- 塔卡上抬 20px 后，下带顶部到 668px，战场中心可用高度相应少 20px（仍 148～668 共 520px，够用）。
+- 本会话模型不支持 `read_image`，遮挡结论为几何探针而非肉眼确认。
