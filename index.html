@@ -32,20 +32,35 @@
             <span id="hud-name" class="hud-name"></span>
           </div>
           <div class="hud-stats">
-            <span>步数 <b id="hud-moves">0</b></span>
-            <span>推动 <b id="hud-pushes">0</b></span>
-            <span>剩余 <b id="hud-left">0</b></span>
+            <!-- 竖屏标签缩写为单字。完整/缩写两份由 CSS 断点切换；
+                 .stat 统一 white-space:nowrap，杜绝「步数」被逐字折成上下两行。
+                 数值用 <b>，ui.ts 只改这三个 <b>，标签结构不影响逻辑。 -->
+            <span class="stat"><i class="stat-full">步数</i><i class="stat-short">步</i> <b id="hud-moves">0</b></span>
+            <span class="stat"><i class="stat-full">推动</i><i class="stat-short">推</i> <b id="hud-pushes">0</b></span>
+            <span class="stat"><i class="stat-full">剩余</i><i class="stat-short">剩</i> <b id="hud-left">0</b></span>
           </div>
           <div class="hud-actions">
+            <!-- 关卡抽屉开关：只在竖屏出现，点关卡号列表按钮即可收起/展开 -->
+            <button id="btn-levels" type="button" title="关卡列表" aria-label="关卡列表" aria-expanded="false">☰</button>
             <button id="btn-undo" type="button" title="撤销 (Z)">撤销</button>
             <button id="btn-reset" type="button" title="重开 (R)">重开</button>
-            <button id="btn-prev" type="button" title="上一关 (,)">上一关</button>
-            <button id="btn-next" type="button" title="下一关 (.)">下一关</button>
+            <button id="btn-prev" type="button" title="上一关 (,)" aria-label="上一关">‹</button>
+            <button id="btn-next" type="button" title="下一关 (.)" aria-label="下一关">›</button>
           </div>
         </div>
 
+        <!-- 触屏十字方向键：直接映射棋盘格的上/右/下/左（0/1/2/3），与相机朝向无关。
+             画布上的拖拽依旧 100% 属于旋转视角，两者互不抢事件。 -->
+        <div id="dpad" class="dpad" role="group" aria-label="方向键">
+          <button type="button" class="dpad-up" data-dir="0" aria-label="向上">▲</button>
+          <button type="button" class="dpad-left" data-dir="3" aria-label="向左">◀</button>
+          <span class="dpad-hub" aria-hidden="true"></span>
+          <button type="button" class="dpad-right" data-dir="1" aria-label="向右">▶</button>
+          <button type="button" class="dpad-down" data-dir="2" aria-label="向下">▼</button>
+        </div>
+
         <div id="hint" class="hint">
-          拖拽旋转 · 滚轮缩放 · 点地面走过去 · 点箱子推一下 · WASD / 方向键移动 · Z 撤销 · R 重开
+          拖拽旋转 · 滚轮缩放 · 点地面走过去 · 点箱子推一下 · WASD / 方向键 / 屏幕方向键移动 · Z 撤销 · R 重开
         </div>
 
         <div id="win" class="win" hidden>

@@ -489,7 +489,10 @@ export class World {
       if (!d || e.buttons === 0) return;
       const dx = e.clientX - d.x;
       const dy = e.clientY - d.y;
-      if (!d.moved && Math.hypot(dx, dy) > 5) d.moved = true;
+      // 拖拽阈值：累计位移 >8px 才认定是「旋转视角」，之后 pointerup 不再触发点击寻路。
+      // 8px 高于手指的自然抖动（约 4～6px），又低于一次有意滑动的起点，
+      // 因此「轻点选格」与「拖拽转视角」互斥：转完视角绝不会误走一步。
+      if (!d.moved && Math.hypot(dx, dy) > 8) d.moved = true;
       if (!d.moved) return;
       this.az -= dx * 0.006;
       this.el = THREE.MathUtils.clamp(this.el + dy * 0.006, 0.32, 1.45);

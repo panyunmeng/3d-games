@@ -86,6 +86,7 @@ body {
   align-items: center;
   gap: 8px;
   width: 100%;
+  min-height: 44px; /* 移动端判据：任何可点元素最小边长 44px（抽屉里也一样） */
   padding: 5px 8px;
   font: inherit;
   font-size: 12px;
@@ -204,6 +205,23 @@ body {
   color: var(--dim);
 }
 
+/* 每个统计项锁成单行：标签 + 空格 + 数值绝不逐字折行。
+   完整标签用于桌面/横屏，缩写标签只在竖屏出现（见下方断点）。 */
+.stat {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.stat i {
+  font-style: normal;
+}
+
+.stat-short {
+  display: none;
+}
+
 .hud-stats b {
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -219,6 +237,9 @@ body {
 button {
   font: inherit;
   font-size: 12px;
+  /* 统一保证任何可点元素最小 44×44（移动端判据；桌面略大也不算退化） */
+  min-width: 44px;
+  min-height: 44px;
   padding: 4px 10px;
   color: var(--text);
   background: var(--panel-2);
@@ -303,39 +324,215 @@ button.primary {
   justify-content: center;
 }
 
-@media (max-width: 760px) {
+/* ── 触屏十字方向键 ──
+   只在可触屏且非桌面宽屏时出现（由 JS 加 .touch 类精确判定，避免鼠标桌面误显）。
+   格子 3×3：上在第一行居中，左/中/右在第二行，下在第三行居中。
+   每键 48×48 ≥44，相邻键间距 4px（角上按键仍 ≥44 的独立命中区），touch-action:none
+   防止浏览器把连按解释成滚动/缩放。固定直角，沿用面板美术。 */
+#dpad {
+  display: none;
+  position: absolute;
+  left: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: 156px;
+  height: 156px;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 6px;
+  z-index: 5;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#dpad button {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dpad-up { grid-area: 1 / 2; }
+.dpad-left { grid-area: 2 / 1; }
+.dpad-hub { grid-area: 2 / 2; }
+.dpad-right { grid-area: 2 / 3; }
+.dpad-down { grid-area: 3 / 2; }
+
+.dpad-hub {
+  background: rgba(13, 15, 20, 0.7);
+  border: 2px solid var(--line-soft);
+}
+
+/* 关卡抽屉开关：桌面有常驻侧栏，不需要开关 */
+#btn-levels {
+  display: none;
+}
+
+/* ── 竖屏：375×812 一屏内要么看棋盘要么看关卡，不长期占屏 ── */
+@media (orientation: portrait) and (max-width: 760px) {
+  /* 侧栏浮成抽屉：默认收起，只在需要选关时覆盖在画面上 */
   #app {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 140px;
+    grid-template-rows: 1fr;
   }
 
   #sidebar {
-    grid-row: 2;
-    border-right: 0;
-    border-top: 2px solid var(--line);
+    position: absolute;
+    z-index: 20;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 320px);
+    border-right: 2px solid var(--line);
+    border-top: 0;
+    box-shadow: 6px 0 0 rgba(0, 0, 0, 0.5);
+    transform: translateX(-104%);
+    transition: transform 0.18s steps(4, end);
   }
 
-  .level-list {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
+  #app.levels-open #sidebar {
+    transform: translateX(0);
   }
+
+  /* 抽屉遮罩：点一下收起，避免遮罩下误触棋盘 */
+  #stage::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.55);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s;
+  }
+
+  #app.levels-open #stage::after {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  #btn-levels {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    font-size: 16px;
+  }
+
+  /* HUD 收成一行：关卡号/名字可省略，统计与四个动作挤在一行 */
+  .hud {
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: 6px;
+    right: 6px;
+    gap: 8px;
+    padding: 6px;
+  }
+
+  .hud-name { display: none; }
+  /* 竖屏物理预算：375 - 12(HUD边距) - 12(padding) ≈ 351px。
+     5 按钮 236px + 4 间隙 16px + 关卡号 25px + 统计 3×~30px + 间隙 ≈ 351px，
+     两位汉字标签(步数/推动/剩余)合计需 ~120px，超出约 40px → 被逐字折成两行。
+     故标签缩写为单字「步/推/剩」（各省一半宽），并配 white-space:nowrap 彻底杜绝折行。
+     不把按钮收进「⋯」菜单：撤销是核心循环里最高频操作，收两层菜单会变 2 次点击。 */
+  .stat-full { display: none; }
+  .stat-short { display: inline; }
+  .hud-stats { gap: 8px; font-size: 11px; }
+
+  .hud-actions {
+    gap: 4px;
+  }
+
+  .hud-actions button:not(#btn-levels) {
+    min-width: 44px;
+    height: 44px;
+    padding: 0 6px;
+    font-size: 13px;
+  }
+
+  /* 方向键靠左下（left/bottom 各 12px）。右侧大片空白是**刻意**留白：
+     平台会在右下角注入「返回平台」悬浮按钮，任何控件都不许占那块区域。 */
+  #dpad {
+    display: grid;
+  }
+
+  .hint { display: none; }
+
+  .win-card {
+    min-width: 0;
+    width: calc(100vw - 48px);
+    padding: 18px 16px;
+  }
+
+  .win-actions button {
+    min-width: 96px;
+    min-height: 44px;
+  }
+}
+
+/* ── 横屏：844×390 窄高，侧栏回左右布局但收紧纵向；按钮 ≥44px ── */
+@media (orientation: landscape) and (max-height: 520px) {
+  #app {
+    grid-template-columns: 188px 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  #sidebar {
+    position: static;
+    transform: none;
+    width: auto;
+    box-shadow: none;
+  }
+
+  #app.levels-open #stage::after {
+    pointer-events: none;
+    opacity: 0;
+  }
+
+  #stage::after { content: none; }
+
+  #btn-levels { display: none; }
+
+  .brand { padding: 8px 12px 6px; }
+  .brand h1 { font-size: 15px; }
+  .brand .sub { display: none; }
+  .level-list { padding: 6px; gap: 2px; }
 
   .level-item {
-    min-width: 92px;
+    min-height: 44px;
+    padding: 3px 6px;
+    font-size: 11px;
   }
 
-  .credit {
-    display: none;
-  }
+  .credit { display: none; }
 
   .hud {
-    flex-wrap: wrap;
-    gap: 8px;
+    top: 6px;
+    gap: 10px;
+    padding: 5px 8px;
   }
 
-  .hint {
-    display: none;
+  .hud-actions button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 8px;
   }
+
+  .hud-actions button:not(#btn-levels) { font-size: 13px; }
+
+  /* 横屏方向键贴**画布左下角**（left/bottom 各 8px），对齐画布坐标系原点，
+     不悬在棋盘中部——否则既不像贴边也不像居中，看着无轴线归属。
+     右下角同样留给平台「返回平台」按钮。 */
+  #dpad {
+    display: grid;
+    left: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .hint { display: none; }
 }
