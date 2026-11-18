@@ -14,7 +14,7 @@ import { sfx, unlock, toggleMute, isMuted } from './audio.js';
 import {
   newGame, tick, updateTimers, tickMs, queueDirection, advanceLevel, speedFactor,
 } from './logic.js';
-import { MODE_LABEL, WALL_LABEL, COLS, ROWS } from './config.js';
+import { MODE_LABEL, WALL_LABEL, COLS, ROWS, MOBILE } from './config.js';
 
 const canvas = document.getElementById('stage');
 const stage = createStage(canvas);
@@ -50,11 +50,14 @@ function startGame(sel) {
   accumulator = -900;   // 起步缓冲：先让玩家看清棋盘再开始走
   phase = 'playing';
   ui.showPlaying();
+  syncTouchVisibility();
   ui.update(state, 0);
   sfx.start();
   if (!hasPlayed) {
     hasPlayed = true;
-    ui.banner('用 WASD / 方向键 转向', '鼠标拖拽可旋转视角', 2200);
+    const touch = touchQuery.matches;
+    ui.banner(touch ? '用右下方向键转向' : '用 WASD / 方向键 转向',
+      touch ? '拖拽画布可旋转视角' : '鼠标拖拽可旋转视角', 2200);
   } else {
     ui.banner(MODE_LABEL[sel.mode], WALL_LABEL[sel.wall], 1200);
   }
@@ -66,12 +69,14 @@ function toMenu() {
   state = null;
   view.reset();
   ui.showMenu();
+  syncTouchVisibility();
 }
 
 function resume() {
   if (phase !== 'paused') return;
   phase = 'playing';
   ui.hidePause();
+  syncTouchVisibility();
   lastTs = performance.now();
 }
 
@@ -79,11 +84,13 @@ function pause() {
   if (phase !== 'playing') return;
   phase = 'paused';
   ui.showPause();
+  syncTouchVisibility();
 }
 
 function gameOver() {
   if (phase === 'over') return;
   phase = 'over';
+  syncTouchVisibility();
   accumulator = tickMs(state);
   const newBest = ui.submitScore(state);
   sfx.die();
@@ -214,6 +221,7 @@ window.addEventListener('keydown', (e) => {
 
   if (e.code === 'KeyM') {
     const m = toggleMute();
+    syncMuteBtn();
     ui.banner(m ? '已静音' : '声音开启', '', 700);
     return;
   }
@@ -221,13 +229,87 @@ window.addEventListener('keydown', (e) => {
   const name = KEY_TO_DIR[e.code];
   if (!name) return;
   e.preventDefault();
+  steer(name);
+});
+
+/**
+ * 唯一的转向入口：键盘与触屏方向键都走这里。
+ * 关键约束——必须经过 screenDirToGrid()，相机转了以后屏幕「上」对应的世界方向
+ * 也要跟着转；触屏绝不自己算方向，否则转视角后手机上会「上下颠倒」。
+ */
+function steer(name) {
   unlock();
-  if (phase === 'menu') { startGame({ ...ui.selection }); }  // 直接按键开局
+  if (phase === 'menu') { startGame({ ...ui.selection }); }  // 方向键也能直接开局
   if (phase === 'playing' && state) {
     const dir = screenDirToGrid(name);
     queueDirection(state, dir);
   }
+}
+
+/* ---------------- 触屏输入 ---------------- */
+
+const touchPad = document.getElementById('touch-pad');
+const touchQuery = window.matchMedia(`(max-width:${MOBILE.breakpointPx}px), (pointer:coarse)`);
+
+function syncTouchVisibility() {
+  const narrow = touchQuery.matches;
+  // 方向键仅在对局中/暂停时的窄屏显示；菜单与结算会让覆盖层挡住它，无需出现。
+  touchPad?.classList.toggle('hidden', !narrow || (phase !== 'playing' && phase !== 'paused'));
+}
+window.addEventListener('resize', syncTouchVisibility);
+touchQuery.addEventListener?.('change', syncTouchVisibility);
+
+// 方向键：pointerdown 立即转向 + 按住自动重复；pointerup/cancel 停止。
+// 用 pointerId 记录每个按键的重复定时器，双指同时按两个方向互不覆盖。
+const repeatTimers = new Map();
+touchPad?.querySelectorAll('.dpad').forEach((btn) => {
+  const dir = btn.dataset.dir;
+  const stop = () => {
+    const t = repeatTimers.get(dir);
+    if (t) { clearTimeout(t.timeout); clearInterval(t.interval); repeatTimers.delete(dir); }
+    btn.classList.remove('pressed');
+  };
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    btn.setPointerCapture?.(e.pointerId);
+    stop();
+    steer(dir);
+    btn.classList.add('pressed');
+    const timeout = setTimeout(() => {
+      const interval = setInterval(() => steer(dir), MOBILE.repeatEveryMs);
+      const rec = repeatTimers.get(dir);
+      if (rec) rec.interval = interval;
+    }, MOBILE.repeatDelayMs);
+    repeatTimers.set(dir, { timeout, interval: null });
+  });
+  btn.addEventListener('pointerup', stop);
+  btn.addEventListener('pointercancel', stop);
+  btn.addEventListener('lostpointercapture', stop);
 });
+
+// HUD 触屏动作：暂停 / 重开 / 静音
+document.getElementById('btn-pause')?.addEventListener('click', () => {
+  unlock();
+  if (phase === 'playing') pause();
+  else if (phase === 'paused') resume();
+});
+document.getElementById('btn-restart')?.addEventListener('click', () => {
+  unlock();
+  if (phase !== 'menu') startGame({ ...ui.selection });
+});
+const muteBtn = document.getElementById('btn-mute');
+function syncMuteBtn() {
+  muteBtn?.classList.toggle('muted', isMuted());
+  if (muteBtn) muteBtn.querySelector('small').textContent = isMuted() ? '取消静音' : '静音';
+}
+muteBtn?.addEventListener('click', () => {
+  unlock();
+  const m = toggleMute();
+  syncMuteBtn();
+  ui.banner(m ? '已静音' : '声音开启', '', 700);
+});
+syncMuteBtn();
+syncTouchVisibility();
 
 /* ---------------- 主循环 ---------------- */
 
@@ -396,6 +478,23 @@ window.__snake = {
     stage.cam.phi = phi ?? stage.cam.phi;
     stage.cam.radius = radius ?? stage.cam.radius;
     stage.placeCamera();
+  },
+  /** 只读：棋盘四角在屏幕上的包围盒，供移动端几何验收用。 */
+  boardScreenRect() {
+    const corners = [];
+    for (const x of [0, COLS - 1]) {
+      for (const y of [0, ROWS - 1]) {
+        const w = stage.cellToWorld(x, y);
+        const v = new THREE.Vector3(w.x, 0, w.z).project(stage.camera);
+        corners.push({ x: (v.x * 0.5 + 0.5) * window.innerWidth, y: (-v.y * 0.5 + 0.5) * window.innerHeight });
+      }
+    }
+    return {
+      left: Math.round(Math.min(...corners.map((c) => c.x))),
+      right: Math.round(Math.max(...corners.map((c) => c.x))),
+      top: Math.round(Math.min(...corners.map((c) => c.y))),
+      bottom: Math.round(Math.max(...corners.map((c) => c.y))),
+    };
   },
   info() {
     return state ? {

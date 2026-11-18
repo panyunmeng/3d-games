@@ -35,8 +35,23 @@
       <div class="chip ghost" id="chip-speed">速度 1.0×</div>
       <div class="chip ghost" id="chip-best">最高 0</div>
       <div class="item-slots" id="item-slots"></div>
+      <!-- 触屏动作条：暂停/重开/静音，桌面隐藏（键盘快捷键保留） -->
+      <div class="touch-actions" id="touch-actions">
+        <button class="icon-btn" id="btn-pause" type="button" aria-label="暂停">⏸<small>暂停</small></button>
+        <button class="icon-btn" id="btn-restart" type="button" aria-label="重开">↻<small>重开</small></button>
+        <button class="icon-btn" id="btn-mute" type="button" aria-label="静音">♪<small>静音</small></button>
+      </div>
     </div>
   </header>
+
+  <!-- 触屏方向键（右下十字键，四向各 ≥44px；桌面隐藏） -->
+  <div id="touch-pad" class="touch-pad hidden" aria-label="触屏方向键">
+    <button class="dpad dpad-up" type="button" data-dir="up" aria-label="向上">▲</button>
+    <button class="dpad dpad-left" type="button" data-dir="left" aria-label="向左">◀</button>
+    <div class="dpad-center" aria-hidden="true"></div>
+    <button class="dpad dpad-right" type="button" data-dir="right" aria-label="向右">▶</button>
+    <button class="dpad dpad-down" type="button" data-dir="down" aria-label="向下">▼</button>
+  </div>
 
   <!-- 关卡通过 / 提示横幅 -->
   <div id="banner" class="banner hidden"></div>

@@ -8,7 +8,7 @@
  */
 import * as THREE from '../vendor/three.module.js';
 import { RoundedBoxGeometry } from '../vendor/RoundedBoxGeometry.js';
-import { COLS, ROWS, CELL } from './config.js';
+import { COLS, ROWS, CELL, MOBILE } from './config.js';
 
 /** 格坐标 → 世界坐标（棋盘中心为原点，格 y 映射到世界 z）。 */
 export function cellToWorld(x, y) {
@@ -272,11 +272,15 @@ export function createStage(canvas) {
   let shakeAmp = 0;
   let shakeTime = 0;
 
+  // 竖屏适配：把棋盘中心投影到「HUD 下沿 ↔ 方向键上沿」这条可视带的正中。
+  // 只影响窄视口首次进入；桌面沿用原 target，1440×900 的构图一字不改。
+  let autoFitNdcY = 0;
+
   function placeCamera() {
     const sp = Math.sin(cam.phi);
     camera.position.set(
       cam.radius * sp * Math.sin(cam.theta),
-      cam.radius * Math.cos(cam.phi),
+      cam.radius * Math.cos(cam.phi) + autoFitNdcY,
       cam.radius * sp * Math.cos(cam.theta),
     );
     if (shakeTime > 0) {
@@ -285,9 +289,73 @@ export function createStage(canvas) {
       camera.position.y += (Math.random() - 0.5) * a * 0.6;
       camera.position.z += (Math.random() - 0.5) * a;
     }
-    camera.lookAt(target);
+    camera.lookAt(target.x, target.y + autoFitNdcY, target.z);
   }
   placeCamera();
+
+  /**
+   * 竖屏「整盘入画」自适应。
+   *
+   * 第一性原理：PerspectiveCamera 的水平半视角 α 满足 tan α = tan(fov/2)·aspect，
+   * 375/812 下 aspect≈0.46，α 远小于桌面；原半径 40 会把 21 格盘投到 NDC x≈±2.2，
+   * 即便拉到原上限 62 仍 ≈±1.5，必然切边。这里按相机方位把棋盘四个角投影出来，
+   * 二分出「最远角恰好落在 ±(1-margin)」的半径，再用屏幕带的中心偏移重设 look-at，
+   * 让棋盘正好落在 HUD 与方向键之间。宽屏不调用，桌面构图零变化。
+   */
+  function fitBoard(w, h) {
+    if (w >= MOBILE.breakpointPx || h < w) {
+      autoFitNdcY = 0;
+      scene.fog.near = 36;
+      scene.fog.far = 74;
+      return;
+    }
+    // 竖屏改为更接近俯视的机位：同样的水平宽度下，棋盘纵向更高、格子更接近正方形。
+    cam.phi = MOBILE.fitPhi;
+    // 可视带：上边让开 HUD（topReserve），下边让开方向键（bottomReserve）
+    const centerNdcY = 1 - 2 * (MOBILE.boardTopReserve
+      + (1 - MOBILE.boardTopReserve - MOBILE.boardBottomReserve) / 2);
+    const limX = 1 - 0.06;   // 左右各留 6% 余量，盘边不贴屏
+    const limY = Math.max(0.08, 0.5 * (1 - MOBILE.boardTopReserve - MOBILE.boardBottomReserve) - 0.04);
+
+    const probeCam = camera.clone();
+    probeCam.aspect = w / h;
+    const probeTargetY = target.y;
+    const corner = new THREE.Vector3();
+    // 返回最远角在 NDC 下的 (|x|, |y - centerNdcY|) 相对可视带中心的偏移
+    const worst = (r) => {
+      const sp = Math.sin(cam.phi);
+      probeCam.position.set(
+        r * sp * Math.sin(cam.theta),
+        r * Math.cos(cam.phi),
+        r * sp * Math.cos(cam.theta),
+      );
+      probeCam.lookAt(0, probeTargetY, 0);
+      probeCam.updateMatrixWorld();
+      probeCam.updateProjectionMatrix();
+      let ox = 0, oy = 0;
+      for (const x of [-halfX, halfX]) {
+        for (const z of [-halfZ, halfZ]) {
+          corner.set(x, 0, z).project(probeCam);
+          ox = Math.max(ox, Math.abs(corner.x));
+          oy = Math.max(oy, Math.abs(corner.y - centerNdcY));
+        }
+      }
+      return Math.max(ox / limX, oy / limY);
+    };
+    let lo = cam.minRadius, hi = MOBILE.fitRadiusMax;
+    for (let i = 0; i < 22; i++) {
+      const mid = (lo + hi) / 2;
+      if (worst(mid) > 1) lo = mid; else hi = mid;
+    }
+    cam.radius = Math.min(MOBILE.fitRadiusMax, hi * MOBILE.fitMargin);
+    // 雾的 near/far 是按桌面 radius=40 调的；竖屏适配把相机拉到 ~110，
+    // 不拉开雾距的话整盘会被雾吞成背景色（截图全黑的根因）。
+    scene.fog.near = cam.radius - 18;
+    scene.fog.far = cam.radius + 34;
+    // 把棋盘中心（投影 y=0）移到可视带中心：look-at 下移，画面里棋盘就上移。
+    autoFitNdcY = -centerNdcY * cam.radius * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    placeCamera();
+  }
 
   let dragging = false;
   let lastX = 0;
@@ -313,7 +381,8 @@ export function createStage(canvas) {
       const [a, b] = [...pointers.values()];
       const d = Math.hypot(a.x - b.x, a.y - b.y);
       if (pinchDist > 0) {
-        cam.radius = clamp(cam.radius * (pinchDist / d), cam.minRadius, cam.maxRadius);
+        const hi = Math.max(cam.maxRadius, cam.radius);   // 竖屏适配半径可能 > 原 maxRadius
+        cam.radius = clamp(cam.radius * (pinchDist / d), cam.minRadius, hi);
         placeCamera();
       }
       pinchDist = d;
@@ -336,16 +405,26 @@ export function createStage(canvas) {
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    cam.radius = clamp(cam.radius + e.deltaY * 0.02, cam.minRadius, cam.maxRadius);
+    const hi = Math.max(cam.maxRadius, cam.radius);
+    cam.radius = clamp(cam.radius + e.deltaY * 0.02, cam.minRadius, hi);
     placeCamera();
   }, { passive: false });
   canvas.addEventListener('dblclick', () => {
-    cam.theta = -0.62; cam.phi = 0.95; cam.radius = 40;
-    placeCamera();
+    cam.theta = -0.62; cam.phi = 0.95;
+    if (window.innerWidth < MOBILE.breakpointPx && window.innerHeight > window.innerWidth) {
+      fitBoard(window.innerWidth, window.innerHeight);  // 竖屏复位回「整盘入画」
+    } else {
+      cam.radius = 40;
+      autoFitNdcY = 0;
+      scene.fog.near = 36;
+      scene.fog.far = 74;
+      placeCamera();
+    }
   });
 
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+  let fittedForPortrait = false;
   function resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -353,8 +432,22 @@ export function createStage(canvas) {
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    const portrait = w < MOBILE.breakpointPx && h > w;
+    if (portrait && !fittedForPortrait) {
+      fitBoard(w, h);
+      fittedForPortrait = true;
+    } else if (!portrait && fittedForPortrait) {
+      // 回到桌面/横屏：恢复原相机距离与中心，不留竖屏偏移
+      cam.radius = 40;
+      autoFitNdcY = 0;
+      scene.fog.near = 36;
+      scene.fog.far = 74;
+      placeCamera();
+      fittedForPortrait = false;
+    }
   }
   window.addEventListener('resize', resize);
+  resize();   // 首屏即按视口适配（竖屏进页就能看到整盘）
 
   return {
     renderer,
@@ -368,6 +461,7 @@ export function createStage(canvas) {
     halfZ,
     setWallMode,
     resize,
+    fitBoard,
     placeCamera,
     shake(amp = 0.5, time = 0.4) {
       shakeAmp = amp;

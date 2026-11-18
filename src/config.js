@@ -66,3 +66,21 @@ export const SCORE = {
 
 export const WALL_LABEL = { classic: '撞墙即死', wrap: '穿墙' };
 export const MODE_LABEL = { endless: '无尽模式', level: '关卡制' };
+
+/** 移动端适配（2026-11-18）：所有触屏/断点/相机适配参数集中在此，逻辑层不受影响。 */
+export const MOBILE = {
+  /** 断点：视口宽度小于它时启用触屏控件与紧凑 HUD；桌面 1440 不受影响。 */
+  breakpointPx: 720,
+  /** 画布上沿保留给 HUD、下沿保留给方向键的最大比例（窄屏限制，避免棋盘被压太小）。 */
+  boardTopReserve: 0.16,
+  boardBottomReserve: 0.30,
+  /** 竖屏相机适配距离上限：21×21 盘在 375 宽下需要的距离远超原 maxRadius=62。 */
+  fitRadiusMax: 120,
+  /** 竖屏初始俯角：更接近俯视，让 21×21 方形盘在窄屏上不被压成扁条。 */
+  fitPhi: 0.5,
+  /** 相机适配留白系数：乘在算出距离上，保证边角有余量。 */
+  fitMargin: 1.12,
+  /** 单个方向键按下后自动重复转向的间隔（ms）；按住可连续排队转向。 */
+  repeatDelayMs: 260,
+  repeatEveryMs: 150,
+};
