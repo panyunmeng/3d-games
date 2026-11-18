@@ -460,9 +460,17 @@
     }
   }
 
-  /* ---------------------------------------------------------------- 输入 */
+  /* ---------------------------------------------------------------- 输入
+   * 鼠标：屏幕横向绝对映射（沿用原手感，桌面语义不变）。
+   * 触摸：改为「按下即抓取挡板的相对拖动」+ 垂直遮挡补偿，理由见 MOVE_K 注释。
+   * 两者都只用 Pointer Events，pointerId 跟踪避免多指覆盖。
+   */
   const keys = Object.create(null);
   let dragging = false;
+  let dragPointerId = null;
+  let dragStartClientX = 0;   // 按下时的手指横坐标
+  let dragStartTargetX = 0;   // 按下瞬间挡板的目标横坐标（抓取点）
+  let dragK = 1;              // 本次拖动的世界单位/px 比例，按下时按视口算一次
 
   function pointerToWorldX(clientX) {
     const r = canvas.getBoundingClientRect();
@@ -471,10 +479,25 @@
     return (fx - 0.5) * CFG.halfW * 2 * 1.02;
   }
 
+  // 拖动比例：把一个「场地半宽」映射到「屏幕可见宽度的一半」。
+  //   推导：世界总宽 2*HALF，屏幕总宽 r.width，故 1px = 2*HALF / r.width（即 pointerToWorldX 的斜率）。
+  //         取 MOVE_K = 0.92 略收一点，让手指不必贴着屏幕边缘就能打满全场，留出拇指舒适区。
+  //   选「相对位移」而不是「绝对位置」的根因：手指按在挡板上时，指尖本身就盖住挡板与来球；
+  //   若用绝对映射，手指点哪挡板就瞬移哪，被盖住的区域玩家什么也看不到。
+  //   相对拖动让手指可以落在挡板下方的空白处，挡板保留在指尖上方可见 —— 这就是垂直遮挡补偿的落点。
+  //   竖直方向无需映射：挡板 Z 固定，手指只需在画布任意纵向位置横向滑动即可。
+  const MOVE_K = 0.92;
+  function dragScale() {
+    return (2 * CFG.halfW * 1.02 / Math.max(1, canvas.getBoundingClientRect().width)) * MOVE_K;
+  }
+
   function onPointerMove(e) {
-    if (e.pointerType === 'mouse' || dragging) {
-      if (rrIsVisible()) return;
+    if (rrIsVisible()) return;
+    if (e.pointerType === 'mouse') {
       G.targetX = pointerToWorldX(e.clientX);
+    } else if (dragging && e.pointerId === dragPointerId) {
+      // 相对位移：以按下时的挡板位置为基准，手指横向移动多少就带动多少。
+      G.targetX = dragStartTargetX + (e.clientX - dragStartClientX) * dragK;
     }
   }
 
@@ -483,12 +506,25 @@
     Sfx.resume();
     if (e.target && e.target.closest && (e.target.closest('#iconBar') || e.target.closest('#overlay'))) return;
     if (rrIsVisible()) return;
-    dragging = true;
-    G.targetX = pointerToWorldX(e.clientX);
+    if (e.pointerType !== 'mouse') {
+      if (dragging) return; // 多指：只认第一个按下的 pointerId，后续手指不抢挡板
+      dragging = true;
+      dragPointerId = e.pointerId;
+      dragStartClientX = e.clientX;
+      dragStartTargetX = G.targetX;
+      dragK = dragScale();
+      // 落点上抬：到此为止只「抓取」挡板，不把它瞬移到指尖下面。
+      // 挡板留在原来的可见位置，手指从空白处开始拖。
+    } else {
+      G.targetX = pointerToWorldX(e.clientX);
+    }
     if (G.state === 'serve') launch();
   }, { passive: true });
-  window.addEventListener('pointerup', function () { dragging = false; }, { passive: true });
-  window.addEventListener('pointercancel', function () { dragging = false; }, { passive: true });
+  function endDrag(e) {
+    if (e.pointerId === dragPointerId) { dragging = false; dragPointerId = null; }
+  }
+  window.addEventListener('pointerup', endDrag, { passive: true });
+  window.addEventListener('pointercancel', endDrag, { passive: true });
 
   window.addEventListener('keydown', function (e) {
     Sfx.resume();
@@ -510,7 +546,7 @@
     }
   });
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
-  window.addEventListener('blur', function () { dragging = false; });
+  window.addEventListener('blur', function () { dragging = false; dragPointerId = null; });
 
   /* ---------------------------------------------------------------- 状态机 */
   function speedNow() {
@@ -1021,6 +1057,8 @@
   $('btnPause').addEventListener('click', togglePause);
   $('btnMute').addEventListener('click', function () { Sfx.setMuted(!Sfx.muted); });
   $('btnFull').addEventListener('click', toggleFullscreen);
+  // 触屏重开入口：无需键盘 R。重开会直接开新局（清分、清命、回第 1 关）。
+  $('btnRestart').addEventListener('click', function () { startGame(); });
 
   /* ---------------------------------------------------------------- 循环 */
   function updatePaddle(dt) {
