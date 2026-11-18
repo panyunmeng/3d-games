@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>3D 俄罗斯方块</title>
 <style>
@@ -37,13 +37,16 @@
       radial-gradient(42% 36% at 50% 100%,rgba(255,122,148,.14),transparent 72%);
     filter:blur(6px);
   }
-  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;}
+  /* canvas 必须显式 touch-action:none：body 上的声明不会覆盖它自己的 computed style。
+     滑动会被页面吞掉的根因就在这里（实测 baseline 是 auto）。 */
+  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;touch-action:none;}
 
   /* ---------------- HUD ---------------- */
   #hud{position:fixed;inset:0;z-index:2;pointer-events:none;
-    padding:calc(16px + env(safe-area-inset-top)) 18px calc(14px + env(safe-area-inset-bottom));
+    padding:calc(14px + env(safe-area-inset-top)) 18px calc(12px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;justify-content:space-between;}
   .top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+  .top-left{display:flex;align-items:flex-start;gap:8px;}
 
   .panel{
     background:var(--card);border:1px solid var(--line);border-radius:20px;
@@ -77,6 +80,32 @@
   }
   .hint b{color:#e9e2ff;font-weight:700;}
 
+  /* ---------------- 触屏控制 ----------------
+     方块游戏对精度敏感：旋转/硬降必须是明确按钮，不能只靠手势。
+     移动做成「按钮 + DAS 连发」而不是横滑：横滑和相机拖动抢同一根手指，
+     而且滑动距离到格数没有一一对应关系，容易一格变三格。 */
+  #controls{
+    pointer-events:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+    /* 右下角让给平台注入的「返回平台」按钮 */
+    margin-right:64px;
+  }
+  .tbtn{
+    pointer-events:auto;touch-action:none;cursor:pointer;
+    min-width:0;width:100%;height:54px;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(255,255,255,.20);border-radius:14px;
+    background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.05));
+    color:var(--ink);font:800 18px/1 inherit;font-family:inherit;letter-spacing:.02em;
+    backdrop-filter:blur(8px);box-shadow:0 6px 18px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.2);
+    transition:transform .08s ease,background .08s ease;
+  }
+  .tbtn:active,.tbtn.down{transform:scale(.95);background:rgba(95,231,255,.24);}
+  .tbtn.primary{
+    background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
+    color:#1b1030;border-color:rgba(255,255,255,.35);font-size:15px;
+  }
+  .tbtn.wide-label{font-size:12px;letter-spacing:.06em;}
+
   /* 居中提示（连击 / T-SPIN / TETRIS） */
   #toast{
     position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) scale(.9);
@@ -95,7 +124,8 @@
   }
   #overlay.on{display:grid;}
   .dialog{
-    width:min(520px,94vw);text-align:center;
+    width:min(520px,94vw);text-align:center;max-height:88dvh;overflow:auto;
+    -webkit-overflow-scrolling:touch;
     background:linear-gradient(180deg,rgba(46,32,96,.92),rgba(20,13,48,.94));
     border:1px solid rgba(255,255,255,.18);border-radius:28px;padding:30px 28px 26px;
     box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.25);
@@ -116,7 +146,7 @@
   .dialog .keys b{color:#efe9ff;font-weight:700;}
   .btn{
     pointer-events:auto;cursor:pointer;border:0;border-radius:12px;
-    padding:14px 34px;font-size:17px;font-weight:900;letter-spacing:.06em;color:#1b1030;
+    min-height:48px;padding:14px 34px;font-size:17px;font-weight:900;letter-spacing:.06em;color:#1b1030;
     background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
     box-shadow:0 10px 26px rgba(255,150,110,.35),inset 0 1px 0 rgba(255,255,255,.6);
     transition:transform .12s ease,box-shadow .12s ease;
@@ -129,24 +159,67 @@
     border:1px solid rgba(255,255,255,.2);margin-left:10px;
   }
 
+  /* 音效按钮在触屏下是 HUD 的一个普通 44px 按钮，不占右下角 */
   #soundBtn{
-    position:fixed;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:3;
-    pointer-events:auto;cursor:pointer;
-    width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
+    pointer-events:auto;cursor:pointer;flex:0 0 44px;
+    width:44px;height:44px;border-radius:12px;border:1px solid var(--line);
     background:var(--card);color:var(--ink);font-size:17px;line-height:1;
     backdrop-filter:blur(10px);box-shadow:0 8px 22px rgba(0,0,0,.3);
+    font-family:inherit;
   }
   #soundBtn.off{opacity:.45;}
 
-  @media (max-width:640px){
-    .score-panel{min-width:150px;padding:10px 13px;}
-    #nextCv{width:92px;height:150px;}
-    #holdCv{width:74px;height:54px;}
-    .hint{font-size:10.5px;padding:6px 12px;}
-    .dialog .keys{grid-template-columns:1fr;}
-  }
-  @media (max-height:560px){
+  /* ---------------- 竖屏（375×812 主档） ---------------- */
+  @media (max-width:640px) and (orientation:portrait){
+    #hud{padding:calc(10px + env(safe-area-inset-top)) 18px calc(10px + env(safe-area-inset-bottom));}
+    .top{gap:8px;}
+    .score-panel{min-width:118px;padding:8px 9px;}
+    .score-val{font-size:24px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .score-sub b{font-size:12px;}
+    .mini{padding:7px 9px;}
+    .mini .lbl{font-size:10px;margin-bottom:4px;}
+    .side{flex-direction:row;gap:6px;}
+    #nextCv{width:64px;height:96px;}
+    #holdCv{width:52px;height:38px;}
+    .lbl{font-size:10px;letter-spacing:.12em;}
     .hint{display:none;}
+    #controls{position:fixed;left:18px;right:82px;bottom:calc(10px + env(safe-area-inset-bottom));margin-right:0;}
+    .tbtn{height:54px;font-size:19px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+  }
+
+  /* ---------------- 横屏（844×390）：面板收到两侧，控制一行 ---------------- */
+  @media (orientation:landscape) and (max-height:560px){
+    #hud{padding:calc(8px + env(safe-area-inset-top)) 14px calc(8px + env(safe-area-inset-bottom));}
+    .hint{display:none;}
+    .top{display:block;}
+    .top-left{display:contents;}
+    .score-panel{position:fixed;left:14px;top:50%;transform:translateY(-50%);
+      min-width:132px;padding:8px 10px;}
+    .score-val{font-size:26px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .side{position:fixed;right:14px;top:50%;transform:translateY(-50%);
+      flex-direction:column;gap:8px;}
+    .mini{padding:6px 8px;}
+    .mini .lbl{font-size:9px;margin-bottom:3px;letter-spacing:.1em;}
+    #nextCv{width:64px;height:100px;}
+    #holdCv{width:56px;height:40px;}
+    #soundBtn{position:fixed;left:14px;bottom:calc(8px + env(safe-area-inset-bottom));}
+    #controls{position:fixed;left:180px;right:90px;bottom:calc(8px + env(safe-area-inset-bottom));
+      margin-right:0;grid-template-columns:repeat(8,1fr);}
+    .tbtn{height:48px;font-size:17px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+    .dialog{padding:18px 22px;}
+    .dialog .keys{margin:10px 0 14px;}
+  }
+
+  /* 桌面：恢复原来的固定音效按钮位置，键盘提示照旧 */
+  @media (min-width:641px) and (min-height:561px){
+    #soundBtn{position:fixed;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));}
+    #controls{display:none;}
   }
 </style>
 </head>
@@ -155,14 +228,17 @@
 
 <div id="hud">
   <div class="top">
-    <div class="panel score-panel">
-      <div class="lbl">分 数</div>
-      <div class="score-val" id="scoreVal">0</div>
-      <div class="score-sub">
-        <span>等级 <b id="levelVal">1</b></span>
-        <span>消行 <b id="linesVal">0</b></span>
-        <span>最高 <b id="bestVal">0</b></span>
+    <div class="top-left">
+      <div class="panel score-panel">
+        <div class="lbl">分 数</div>
+        <div class="score-val" id="scoreVal">0</div>
+        <div class="score-sub">
+          <span>等级 <b id="levelVal">1</b></span>
+          <span>消行 <b id="linesVal">0</b></span>
+          <span>最高 <b id="bestVal">0</b></span>
+        </div>
       </div>
+      <button id="soundBtn" title="音效开关（M）" aria-label="音效开关">🔊</button>
     </div>
     <div class="side">
       <div class="panel mini">
@@ -178,10 +254,19 @@
   <div class="hint">
     <b>← →</b> 移动 · <b>↑ / X</b> 旋转 · <b>Z</b> 逆转 · <b>↓</b> 软降 · <b>空格</b> 硬降 · <b>C</b> 暂存 · <b>P</b> 暂停 · <b>R</b> 重开
   </div>
+  <div id="controls" aria-label="触屏操作">
+    <button class="tbtn" data-act="left" aria-label="左移">◀</button>
+    <button class="tbtn" data-act="right" aria-label="右移">▶</button>
+    <button class="tbtn" data-act="ccw" aria-label="逆转">⟲</button>
+    <button class="tbtn" data-act="cw" aria-label="旋转">⟳</button>
+    <button class="tbtn" data-act="soft" aria-label="软降">▼</button>
+    <button class="tbtn wide-label" data-act="hold" aria-label="暂存">HOLD</button>
+    <button class="tbtn primary" data-act="hard" aria-label="硬降">硬降</button>
+    <button class="tbtn" data-act="pause" aria-label="暂停">❚❚</button>
+  </div>
 </div>
 
 <div id="toast"></div>
-<button id="soundBtn" title="音效开关（M）">🔊</button>
 
 <div id="overlay">
   <div class="dialog" id="dialog"></div>

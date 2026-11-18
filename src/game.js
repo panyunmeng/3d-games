@@ -65,6 +65,40 @@
   var scene = new THREE.Scene();
   var camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 200);
 
+  // 取景带（scissor viewport）：HUD 压在画布上方，若仍按整屏取景，
+  // 井道会被分数面板和触控按钮盖住。把渲染限制在中央带里：
+  // 带子的宽高比交给 framing.js（单测已覆盖 0.4～3.0 不裁切），
+  // 带子四周由 CSS 的 HUD 面板占据，井道与 UI 互不重叠。
+  var viewportBand = { x: 0, y: 0, w: 1, h: 1 };
+  function rectOf(sel) {
+    var elm = document.querySelector(sel);
+    if (!elm) return null;
+    var r = elm.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? r : null;
+  }
+  function computeViewportBand(w, h) {
+    var topEl = rectOf('.top');
+    var ctrl = rectOf('#controls');
+    if (h >= w) {
+      // 竖屏：分数 + next/hold 堆在顶部，触控按钮一行在底部，井道占中间。
+      // 上/下边界量真实 DOM 盒子，而不是猜一个常数——面板尺寸改了也不会压住井道。
+      var top = topEl ? topEl.bottom + 8 : h * 0.28;
+      var bottom = ctrl ? (h - ctrl.top) + 8 : h * 0.12;
+      return { x: 0, y: bottom, w: w, h: Math.max(80, h - top - bottom) };
+    }
+    // 横屏：分数与 next/hold 垂直居中收到两侧，井道从底边按钮上方一直用到顶部。
+    var score = rectOf('.score-panel');
+    var side = rectOf('.side');
+    var left = score ? score.right + 8 : 0;
+    var right = side ? (w - side.left) + 8 : 0;
+    var bottom2 = ctrl ? (h - ctrl.top) + 8 : 56;
+    return {
+      x: left, y: bottom2,
+      w: Math.max(160, w - left - right),
+      h: Math.max(80, h - bottom2 - 8)
+    };
+  }
+
   // 固定斜俯视 + 指针拖动微转；相机不参与判定，只影响观感。
   var orbit = {
     az: 0.20,
@@ -88,10 +122,26 @@
   }
 
   function fitCamera() {
-    // 取景数学在 src/framing.js 里，已被单测覆盖到 aspect 0.4～3.0
-    var f = window.Framing.computeFraming(COLS + 4.2, ROWS + 3.4, camera.fov, camera.aspect, 1.04);
+    // 取景数学在 src/framing.js 里，已被单测覆盖到 aspect 0.4～3.0。
+    // 注意 aspect 用「取景带」而不是整屏：井道必须落在 HUD 让出的中央区域。
+    var f = window.Framing.computeFraming(COLS + 4.2, ROWS + 3.4, camera.fov,
+      viewportBand.w / viewportBand.h, 1.04);
     orbit.radius = f.distance;
     window.__framing = f;
+    window.__band = viewportBand;
+  }
+
+  // 整屏清一次透明底，再把绘制限制在取景带内，HUD 区域的画布保持透明。
+  function renderScene() {
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    renderer.clear();
+    var b = viewportBand;
+    renderer.setViewport(b.x, b.y, b.w, b.h);
+    renderer.setScissor(b.x, b.y, b.w, b.h);
+    renderer.setScissorTest(true);
+    renderer.render(scene, camera);
+    renderer.setScissorTest(false);
   }
 
   // ---------------------------------------------------------------- 光照
@@ -361,7 +411,8 @@
     toast: document.getElementById('toast'),
     overlay: document.getElementById('overlay'),
     dialog: document.getElementById('dialog'),
-    soundBtn: document.getElementById('soundBtn')
+    soundBtn: document.getElementById('soundBtn'),
+    controls: document.getElementById('controls')
   };
 
   // 预览画布按 DPR 放大，避免高 DPI 屏发虚
@@ -789,6 +840,63 @@
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('pointerleave', endDrag);
 
+  // ---------------------------------------------------------------- 触屏输入
+  // 为什么用按钮而不是全屏手势：方块落点要求格级精度，旋转/硬降一旦误触无法撤销；
+  // 横滑又和上面的「拖动微转视角」抢同一根手指。按钮 + DAS 连发与键盘完全同构，
+  // 靠 pointerId 区分每根手指，双指同时「按住左移 + 点旋转」不会互相覆盖。
+  var touchRefs = { left: 0, right: 0, soft: 0 };
+  var touchPointerAct = {};
+
+  function touchBegin(act) {
+    scenarioHold = false;
+    Sound.unlock();
+    if (act === 'pause') { togglePause(); return; }
+    if (state.status !== 'playing') { ensurePlaying(); if (state.status !== 'playing') return; }
+    switch (act) {
+      case 'left':  touchRefs.left++;  held.left = true;  das.timer = 0; das.nextAt = das.delay; doMove(-1); break;
+      case 'right': touchRefs.right++; held.right = true; das.timer = 0; das.nextAt = das.delay; doMove(1);  break;
+      case 'soft':  touchRefs.soft++;  held.down = true;  doSoftDrop(); break;
+      case 'cw':       doRotate(1); break;
+      case 'ccw':      doRotate(-1); break;
+      case 'hold':     doHold(); break;
+      case 'hard':     doHardDrop(); break;
+    }
+  }
+
+  function touchEnd(act) {
+    if (act === 'left')  { touchRefs.left = Math.max(0, touchRefs.left - 1);  if (!touchRefs.left)  held.left = false; }
+    if (act === 'right') { touchRefs.right = Math.max(0, touchRefs.right - 1); if (!touchRefs.right) held.right = false; }
+    if (act === 'soft')  { touchRefs.soft = Math.max(0, touchRefs.soft - 1);  if (!touchRefs.soft)  held.down = false; }
+  }
+
+  if (el.controls) {
+    el.controls.addEventListener('pointerdown', function (e) {
+      var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!btn) return;
+      var act = btn.getAttribute('data-act');
+      e.preventDefault();
+      btn.classList.add('down');
+      if (btn.setPointerCapture) { try { btn.setPointerCapture(e.pointerId); } catch (er) { /* 忽略 */ } }
+      touchPointerAct[e.pointerId] = act;
+      touchBegin(act);
+    });
+    function pointerEnd(e) {
+      var act = touchPointerAct[e.pointerId];
+      if (!act) return;
+      delete touchPointerAct[e.pointerId];
+      touchEnd(act);
+      var btns = el.controls.querySelectorAll('[data-act]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute('data-act') === act) btns[i].classList.remove('down');
+      }
+    }
+    el.controls.addEventListener('pointerup', pointerEnd);
+    el.controls.addEventListener('pointercancel', pointerEnd);
+    el.controls.addEventListener('lostpointercapture', pointerEnd);
+    // 阻止按钮的默认 click/pointer 触发页面行为；touch-action 已在 CSS 关掉
+    el.controls.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+
   el.soundBtn.addEventListener('click', function () {
     setMuted(Sound.toggle());
     Sound.unlock();
@@ -833,7 +941,7 @@
     }
 
     update(dt / 1000, dt);
-    renderer.render(scene, camera);
+    renderScene();
   }
 
   function update(dtSec, dtMs) {
@@ -876,7 +984,8 @@
   // ---------------------------------------------------------------- 尺寸
   function onResize() {
     var w = window.innerWidth, h = window.innerHeight;
-    camera.aspect = w / h;
+    viewportBand = computeViewportBand(w, h);
+    camera.aspect = viewportBand.w / viewportBand.h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
     fitCamera();
@@ -1230,6 +1339,9 @@
     mountFpsPanel();
     buildWell();
     buildPool();
+    viewportBand = computeViewportBand(window.innerWidth, window.innerHeight);
+    camera.aspect = viewportBand.w / viewportBand.h;
+    camera.updateProjectionMatrix();
     fitCamera();
     updateCamera(0);
     setMuted(Sound.muted);
@@ -1287,6 +1399,9 @@
       demo: buildDemoBoard,
       toast: toast,
       fps: function () { return fpsValue; },
+      // 供自动化脚本量井道投影、核对是否被 HUD 遮挡
+      camera: camera,
+      wellBounds: { x0: -0.4, x1: COLS + 0.4, y0: -0.5, y1: ROWS + 0.7, z0: -1.0, z1: 1.0 },
       // 供自动化脚本驱动：等价于按一次键
       press: function (code) {
         window.dispatchEvent(new KeyboardEvent('keydown', { code: code }));

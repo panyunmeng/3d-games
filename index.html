@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <title>3D 俄罗斯方块</title>
 <style>
@@ -37,13 +37,16 @@
       radial-gradient(42% 36% at 50% 100%,rgba(255,122,148,.14),transparent 72%);
     filter:blur(6px);
   }
-  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;}
+  /* canvas 必须显式 touch-action:none：body 上的声明不会覆盖它自己的 computed style。
+     滑动会被页面吞掉的根因就在这里（实测 baseline 是 auto）。 */
+  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;touch-action:none;}
 
   /* ---------------- HUD ---------------- */
   #hud{position:fixed;inset:0;z-index:2;pointer-events:none;
-    padding:calc(16px + env(safe-area-inset-top)) 18px calc(14px + env(safe-area-inset-bottom));
+    padding:calc(14px + env(safe-area-inset-top)) 18px calc(12px + env(safe-area-inset-bottom));
     display:flex;flex-direction:column;justify-content:space-between;}
   .top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+  .top-left{display:flex;align-items:flex-start;gap:8px;}
 
   .panel{
     background:var(--card);border:1px solid var(--line);border-radius:20px;
@@ -77,6 +80,32 @@
   }
   .hint b{color:#e9e2ff;font-weight:700;}
 
+  /* ---------------- 触屏控制 ----------------
+     方块游戏对精度敏感：旋转/硬降必须是明确按钮，不能只靠手势。
+     移动做成「按钮 + DAS 连发」而不是横滑：横滑和相机拖动抢同一根手指，
+     而且滑动距离到格数没有一一对应关系，容易一格变三格。 */
+  #controls{
+    pointer-events:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+    /* 右下角让给平台注入的「返回平台」按钮 */
+    margin-right:64px;
+  }
+  .tbtn{
+    pointer-events:auto;touch-action:none;cursor:pointer;
+    min-width:0;width:100%;height:54px;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(255,255,255,.20);border-radius:14px;
+    background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.05));
+    color:var(--ink);font:800 18px/1 inherit;font-family:inherit;letter-spacing:.02em;
+    backdrop-filter:blur(8px);box-shadow:0 6px 18px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.2);
+    transition:transform .08s ease,background .08s ease;
+  }
+  .tbtn:active,.tbtn.down{transform:scale(.95);background:rgba(95,231,255,.24);}
+  .tbtn.primary{
+    background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
+    color:#1b1030;border-color:rgba(255,255,255,.35);font-size:15px;
+  }
+  .tbtn.wide-label{font-size:12px;letter-spacing:.06em;}
+
   /* 居中提示（连击 / T-SPIN / TETRIS） */
   #toast{
     position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) scale(.9);
@@ -95,7 +124,8 @@
   }
   #overlay.on{display:grid;}
   .dialog{
-    width:min(520px,94vw);text-align:center;
+    width:min(520px,94vw);text-align:center;max-height:88dvh;overflow:auto;
+    -webkit-overflow-scrolling:touch;
     background:linear-gradient(180deg,rgba(46,32,96,.92),rgba(20,13,48,.94));
     border:1px solid rgba(255,255,255,.18);border-radius:28px;padding:30px 28px 26px;
     box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.25);
@@ -116,7 +146,7 @@
   .dialog .keys b{color:#efe9ff;font-weight:700;}
   .btn{
     pointer-events:auto;cursor:pointer;border:0;border-radius:12px;
-    padding:14px 34px;font-size:17px;font-weight:900;letter-spacing:.06em;color:#1b1030;
+    min-height:48px;padding:14px 34px;font-size:17px;font-weight:900;letter-spacing:.06em;color:#1b1030;
     background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
     box-shadow:0 10px 26px rgba(255,150,110,.35),inset 0 1px 0 rgba(255,255,255,.6);
     transition:transform .12s ease,box-shadow .12s ease;
@@ -129,24 +159,67 @@
     border:1px solid rgba(255,255,255,.2);margin-left:10px;
   }
 
+  /* 音效按钮在触屏下是 HUD 的一个普通 44px 按钮，不占右下角 */
   #soundBtn{
-    position:fixed;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));z-index:3;
-    pointer-events:auto;cursor:pointer;
-    width:42px;height:42px;border-radius:12px;border:1px solid var(--line);
+    pointer-events:auto;cursor:pointer;flex:0 0 44px;
+    width:44px;height:44px;border-radius:12px;border:1px solid var(--line);
     background:var(--card);color:var(--ink);font-size:17px;line-height:1;
     backdrop-filter:blur(10px);box-shadow:0 8px 22px rgba(0,0,0,.3);
+    font-family:inherit;
   }
   #soundBtn.off{opacity:.45;}
 
-  @media (max-width:640px){
-    .score-panel{min-width:150px;padding:10px 13px;}
-    #nextCv{width:92px;height:150px;}
-    #holdCv{width:74px;height:54px;}
-    .hint{font-size:10.5px;padding:6px 12px;}
-    .dialog .keys{grid-template-columns:1fr;}
-  }
-  @media (max-height:560px){
+  /* ---------------- 竖屏（375×812 主档） ---------------- */
+  @media (max-width:640px) and (orientation:portrait){
+    #hud{padding:calc(10px + env(safe-area-inset-top)) 18px calc(10px + env(safe-area-inset-bottom));}
+    .top{gap:8px;}
+    .score-panel{min-width:118px;padding:8px 9px;}
+    .score-val{font-size:24px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .score-sub b{font-size:12px;}
+    .mini{padding:7px 9px;}
+    .mini .lbl{font-size:10px;margin-bottom:4px;}
+    .side{flex-direction:row;gap:6px;}
+    #nextCv{width:64px;height:96px;}
+    #holdCv{width:52px;height:38px;}
+    .lbl{font-size:10px;letter-spacing:.12em;}
     .hint{display:none;}
+    #controls{position:fixed;left:18px;right:82px;bottom:calc(10px + env(safe-area-inset-bottom));margin-right:0;}
+    .tbtn{height:54px;font-size:19px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+  }
+
+  /* ---------------- 横屏（844×390）：面板收到两侧，控制一行 ---------------- */
+  @media (orientation:landscape) and (max-height:560px){
+    #hud{padding:calc(8px + env(safe-area-inset-top)) 14px calc(8px + env(safe-area-inset-bottom));}
+    .hint{display:none;}
+    .top{display:block;}
+    .top-left{display:contents;}
+    .score-panel{position:fixed;left:14px;top:50%;transform:translateY(-50%);
+      min-width:132px;padding:8px 10px;}
+    .score-val{font-size:26px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .side{position:fixed;right:14px;top:50%;transform:translateY(-50%);
+      flex-direction:column;gap:8px;}
+    .mini{padding:6px 8px;}
+    .mini .lbl{font-size:9px;margin-bottom:3px;letter-spacing:.1em;}
+    #nextCv{width:64px;height:100px;}
+    #holdCv{width:56px;height:40px;}
+    #soundBtn{position:fixed;left:14px;bottom:calc(8px + env(safe-area-inset-bottom));}
+    #controls{position:fixed;left:180px;right:90px;bottom:calc(8px + env(safe-area-inset-bottom));
+      margin-right:0;grid-template-columns:repeat(8,1fr);}
+    .tbtn{height:48px;font-size:17px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+    .dialog{padding:18px 22px;}
+    .dialog .keys{margin:10px 0 14px;}
+  }
+
+  /* 桌面：恢复原来的固定音效按钮位置，键盘提示照旧 */
+  @media (min-width:641px) and (min-height:561px){
+    #soundBtn{position:fixed;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));}
+    #controls{display:none;}
   }
 </style>
 </head>
@@ -155,14 +228,17 @@
 
 <div id="hud">
   <div class="top">
-    <div class="panel score-panel">
-      <div class="lbl">分 数</div>
-      <div class="score-val" id="scoreVal">0</div>
-      <div class="score-sub">
-        <span>等级 <b id="levelVal">1</b></span>
-        <span>消行 <b id="linesVal">0</b></span>
-        <span>最高 <b id="bestVal">0</b></span>
+    <div class="top-left">
+      <div class="panel score-panel">
+        <div class="lbl">分 数</div>
+        <div class="score-val" id="scoreVal">0</div>
+        <div class="score-sub">
+          <span>等级 <b id="levelVal">1</b></span>
+          <span>消行 <b id="linesVal">0</b></span>
+          <span>最高 <b id="bestVal">0</b></span>
+        </div>
       </div>
+      <button id="soundBtn" title="音效开关（M）" aria-label="音效开关">🔊</button>
     </div>
     <div class="side">
       <div class="panel mini">
@@ -178,10 +254,19 @@
   <div class="hint">
     <b>← →</b> 移动 · <b>↑ / X</b> 旋转 · <b>Z</b> 逆转 · <b>↓</b> 软降 · <b>空格</b> 硬降 · <b>C</b> 暂存 · <b>P</b> 暂停 · <b>R</b> 重开
   </div>
+  <div id="controls" aria-label="触屏操作">
+    <button class="tbtn" data-act="left" aria-label="左移">◀</button>
+    <button class="tbtn" data-act="right" aria-label="右移">▶</button>
+    <button class="tbtn" data-act="ccw" aria-label="逆转">⟲</button>
+    <button class="tbtn" data-act="cw" aria-label="旋转">⟳</button>
+    <button class="tbtn" data-act="soft" aria-label="软降">▼</button>
+    <button class="tbtn wide-label" data-act="hold" aria-label="暂存">HOLD</button>
+    <button class="tbtn primary" data-act="hard" aria-label="硬降">硬降</button>
+    <button class="tbtn" data-act="pause" aria-label="暂停">❚❚</button>
+  </div>
 </div>
 
 <div id="toast"></div>
-<button id="soundBtn" title="音效开关（M）">🔊</button>
 
 <div id="overlay">
   <div class="dialog" id="dialog"></div>
@@ -1060,6 +1145,40 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   var scene = new THREE.Scene();
   var camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 200);
 
+  // 取景带（scissor viewport）：HUD 压在画布上方，若仍按整屏取景，
+  // 井道会被分数面板和触控按钮盖住。把渲染限制在中央带里：
+  // 带子的宽高比交给 framing.js（单测已覆盖 0.4～3.0 不裁切），
+  // 带子四周由 CSS 的 HUD 面板占据，井道与 UI 互不重叠。
+  var viewportBand = { x: 0, y: 0, w: 1, h: 1 };
+  function rectOf(sel) {
+    var elm = document.querySelector(sel);
+    if (!elm) return null;
+    var r = elm.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 ? r : null;
+  }
+  function computeViewportBand(w, h) {
+    var topEl = rectOf('.top');
+    var ctrl = rectOf('#controls');
+    if (h >= w) {
+      // 竖屏：分数 + next/hold 堆在顶部，触控按钮一行在底部，井道占中间。
+      // 上/下边界量真实 DOM 盒子，而不是猜一个常数——面板尺寸改了也不会压住井道。
+      var top = topEl ? topEl.bottom + 8 : h * 0.28;
+      var bottom = ctrl ? (h - ctrl.top) + 8 : h * 0.12;
+      return { x: 0, y: bottom, w: w, h: Math.max(80, h - top - bottom) };
+    }
+    // 横屏：分数与 next/hold 垂直居中收到两侧，井道从底边按钮上方一直用到顶部。
+    var score = rectOf('.score-panel');
+    var side = rectOf('.side');
+    var left = score ? score.right + 8 : 0;
+    var right = side ? (w - side.left) + 8 : 0;
+    var bottom2 = ctrl ? (h - ctrl.top) + 8 : 56;
+    return {
+      x: left, y: bottom2,
+      w: Math.max(160, w - left - right),
+      h: Math.max(80, h - bottom2 - 8)
+    };
+  }
+
   // 固定斜俯视 + 指针拖动微转；相机不参与判定，只影响观感。
   var orbit = {
     az: 0.20,
@@ -1083,10 +1202,26 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   }
 
   function fitCamera() {
-    // 取景数学在 src/framing.js 里，已被单测覆盖到 aspect 0.4～3.0
-    var f = window.Framing.computeFraming(COLS + 4.2, ROWS + 3.4, camera.fov, camera.aspect, 1.04);
+    // 取景数学在 src/framing.js 里，已被单测覆盖到 aspect 0.4～3.0。
+    // 注意 aspect 用「取景带」而不是整屏：井道必须落在 HUD 让出的中央区域。
+    var f = window.Framing.computeFraming(COLS + 4.2, ROWS + 3.4, camera.fov,
+      viewportBand.w / viewportBand.h, 1.04);
     orbit.radius = f.distance;
     window.__framing = f;
+    window.__band = viewportBand;
+  }
+
+  // 整屏清一次透明底，再把绘制限制在取景带内，HUD 区域的画布保持透明。
+  function renderScene() {
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    renderer.clear();
+    var b = viewportBand;
+    renderer.setViewport(b.x, b.y, b.w, b.h);
+    renderer.setScissor(b.x, b.y, b.w, b.h);
+    renderer.setScissorTest(true);
+    renderer.render(scene, camera);
+    renderer.setScissorTest(false);
   }
 
   // ---------------------------------------------------------------- 光照
@@ -1356,7 +1491,8 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
     toast: document.getElementById('toast'),
     overlay: document.getElementById('overlay'),
     dialog: document.getElementById('dialog'),
-    soundBtn: document.getElementById('soundBtn')
+    soundBtn: document.getElementById('soundBtn'),
+    controls: document.getElementById('controls')
   };
 
   // 预览画布按 DPR 放大，避免高 DPI 屏发虚
@@ -1784,6 +1920,63 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   canvas.addEventListener('pointercancel', endDrag);
   canvas.addEventListener('pointerleave', endDrag);
 
+  // ---------------------------------------------------------------- 触屏输入
+  // 为什么用按钮而不是全屏手势：方块落点要求格级精度，旋转/硬降一旦误触无法撤销；
+  // 横滑又和上面的「拖动微转视角」抢同一根手指。按钮 + DAS 连发与键盘完全同构，
+  // 靠 pointerId 区分每根手指，双指同时「按住左移 + 点旋转」不会互相覆盖。
+  var touchRefs = { left: 0, right: 0, soft: 0 };
+  var touchPointerAct = {};
+
+  function touchBegin(act) {
+    scenarioHold = false;
+    Sound.unlock();
+    if (act === 'pause') { togglePause(); return; }
+    if (state.status !== 'playing') { ensurePlaying(); if (state.status !== 'playing') return; }
+    switch (act) {
+      case 'left':  touchRefs.left++;  held.left = true;  das.timer = 0; das.nextAt = das.delay; doMove(-1); break;
+      case 'right': touchRefs.right++; held.right = true; das.timer = 0; das.nextAt = das.delay; doMove(1);  break;
+      case 'soft':  touchRefs.soft++;  held.down = true;  doSoftDrop(); break;
+      case 'cw':       doRotate(1); break;
+      case 'ccw':      doRotate(-1); break;
+      case 'hold':     doHold(); break;
+      case 'hard':     doHardDrop(); break;
+    }
+  }
+
+  function touchEnd(act) {
+    if (act === 'left')  { touchRefs.left = Math.max(0, touchRefs.left - 1);  if (!touchRefs.left)  held.left = false; }
+    if (act === 'right') { touchRefs.right = Math.max(0, touchRefs.right - 1); if (!touchRefs.right) held.right = false; }
+    if (act === 'soft')  { touchRefs.soft = Math.max(0, touchRefs.soft - 1);  if (!touchRefs.soft)  held.down = false; }
+  }
+
+  if (el.controls) {
+    el.controls.addEventListener('pointerdown', function (e) {
+      var btn = e.target.closest ? e.target.closest('[data-act]') : null;
+      if (!btn) return;
+      var act = btn.getAttribute('data-act');
+      e.preventDefault();
+      btn.classList.add('down');
+      if (btn.setPointerCapture) { try { btn.setPointerCapture(e.pointerId); } catch (er) { /* 忽略 */ } }
+      touchPointerAct[e.pointerId] = act;
+      touchBegin(act);
+    });
+    function pointerEnd(e) {
+      var act = touchPointerAct[e.pointerId];
+      if (!act) return;
+      delete touchPointerAct[e.pointerId];
+      touchEnd(act);
+      var btns = el.controls.querySelectorAll('[data-act]');
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].getAttribute('data-act') === act) btns[i].classList.remove('down');
+      }
+    }
+    el.controls.addEventListener('pointerup', pointerEnd);
+    el.controls.addEventListener('pointercancel', pointerEnd);
+    el.controls.addEventListener('lostpointercapture', pointerEnd);
+    // 阻止按钮的默认 click/pointer 触发页面行为；touch-action 已在 CSS 关掉
+    el.controls.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+
   el.soundBtn.addEventListener('click', function () {
     setMuted(Sound.toggle());
     Sound.unlock();
@@ -1828,7 +2021,7 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
     }
 
     update(dt / 1000, dt);
-    renderer.render(scene, camera);
+    renderScene();
   }
 
   function update(dtSec, dtMs) {
@@ -1871,7 +2064,8 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
   // ---------------------------------------------------------------- 尺寸
   function onResize() {
     var w = window.innerWidth, h = window.innerHeight;
-    camera.aspect = w / h;
+    viewportBand = computeViewportBand(w, h);
+    camera.aspect = viewportBand.w / viewportBand.h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
     fitCamera();
@@ -2225,6 +2419,9 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
     mountFpsPanel();
     buildWell();
     buildPool();
+    viewportBand = computeViewportBand(window.innerWidth, window.innerHeight);
+    camera.aspect = viewportBand.w / viewportBand.h;
+    camera.updateProjectionMatrix();
     fitCamera();
     updateCamera(0);
     setMuted(Sound.muted);
@@ -2282,6 +2479,9 @@ THREE.RoundedBoxGeometry = RoundedBoxGeometry;
       demo: buildDemoBoard,
       toast: toast,
       fps: function () { return fpsValue; },
+      // 供自动化脚本量井道投影、核对是否被 HUD 遮挡
+      camera: camera,
+      wellBounds: { x0: -0.4, x1: COLS + 0.4, y0: -0.5, y1: ROWS + 0.7, z0: -1.0, z1: 1.0 },
       // 供自动化脚本驱动：等价于按一次键
       press: function (code) {
         window.dispatchEvent(new KeyboardEvent('keydown', { code: code }));

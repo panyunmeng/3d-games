@@ -89,3 +89,54 @@
 - 仓库名按 Gitea 的 AlphaDashDot 规则转写拼音：`3D俄罗斯方块` → `3d-eluosifangkuai`
   （与同系列 `3d-dazhuankuai`、`3d-sao-lei` 的命名风格一致）
 - `.agents/` 一并入库：约束与台账是工程的一部分；`work/visual/` 里的截图是验收证据
+
+## 2026-11-18 22:30 — 移动端适配（触屏 + 响应式 HUD + 竖屏可玩）
+
+### 方案与取舍（第一性推导）
+
+- **触屏入口**：8 个 54px 按钮（左右移动 / 顺转 / 逆转 / 软降 / 硬降 / HOLD / 暂停）。
+  旋转与硬降是明确按钮而非手势——方块落点要格级精度，误触无法撤销；
+  移动用「按钮 + DAS 连发」而非横滑——横滑和既有的「拖动微转视角」抢同一根手指，
+  且滑动距离到格数没有一一对应关系。多点用 `pointerId` 区分，双指「按住移动 + 点旋转」互不覆盖。
+- **不让井道被 HUD 压住**：`game.js` 加 scissor 取景带 `computeViewportBand()`，
+  上/下（竖屏）或左/右（横屏）边界量真实 DOM 盒子，带子宽高比交给未改动的 `framing.js`，
+  用 `renderer.setViewport/setScissor` 只往带子里画。这样井道和 HUD 物理隔离，
+  不用猜常数，也不牺牲取景单测的覆盖。
+- **右下角保留**：触控区 `right:82px`（竖屏）/ `right:90px`（横屏），
+  给平台注入的「返回平台」按钮留位；音效按钮并入 HUD 顶部，不再独占右下角。
+- **touch-action**：`#cv` 显式 `touch-action:none`（baseline computed 是 `auto`），
+  触控按钮也 `touch-action:none`。
+
+### 改动文件
+
+- `src/shell.html`：viewport 加 `user-scalable=no`；加 `#controls` 一组触控按钮；
+  HUD 竖屏把 next/hold 横排收紧高度、横屏左右分置并垂直居中；
+  `.btn` / `#soundBtn` 最小 44～48px；覆盖层 `max-height:88dvh;overflow:auto`。
+- `src/game.js`：加取景带几何与 `renderScene()` scissor 渲染；
+  加 Pointer Events 触控输入（复用既有 `held/das` 状态机，与键盘同构）；
+  预览画布尺寸随 CSS 变化自动重算 DPR；暴露 `__band` / `__game.camera` 供自动化量几何。
+- `index.html`：由 `python build.py` 重建，**696641 bytes**（未手改）。
+- `src/core.js`、`src/framing.js`：未改。
+
+### 验证结论（原始输出见汇报）
+
+- `npm run check`：**30/30 全绿**（3 个 `node --check` + 内核 25 + 取景 5）。
+- `python build.py`：`index.html 696641 bytes`。
+- `mobile-check.mjs`（三视口）：**3/3 PASS**，errors=0，overflowX=0，
+  `minTap=44px`，`touch-action=none`。
+- `?selftest=1`：**6/6 PASS**（54 步随机对局、值域、分数、WebGL、绘制调用 20、2ms），控制台 0 error。
+- 几何量化（真实投影井道 8 角 + DOM 盒子）：
+  - 竖屏 375×812：井道 x=65～311、y=164～652；HUD 侧栏底 140、按钮顶 686，四周留 24～34px，无重叠。
+  - 横屏 844×390：井道 x=375～522、y=17～311；左分数栏右边 149、右预览栏左边 748、按钮顶 334，无重叠。
+  - 桌面 1440×900：井道 x=548～935、y=33～804，HUD 在两侧，未退化。
+- 触屏按钮真机事件（CDP `Input.dispatchTouchEvent`）：左右移动 x 3→0→1、顺转 rot 0→1、
+  逆转 rot 1→0、软降 y 15→14 且分数 +1、硬降分数 +32、暂停 playing→paused，**0 异常**。
+- 三视口截图：`.agents/work/mobile/tetris-{portrait,landscape,desktop}{-play}.png`（工具生成，未入库）。
+
+### 已知不足
+
+- 本 agent 所用模型不支持 `read_image`，无法目视截图；改用 CDP DOM 几何与井道投影量化替代，
+  结论是「几何上互不重叠且井道完整落在取景带内」，与人工目视仍有细微差异（例如配色观感）。
+- 横屏井道偏窄（约 147px 宽）——2:1 井道在 390px 高视口内的几何必然，面板已收到两侧。
+- 双指缩放/手势旋转未做（规范要求的是按钮入口，已满足）。
+- 未做触屏长按连发速度调节（当前复用键盘 DAS 150ms + 45ms）。
