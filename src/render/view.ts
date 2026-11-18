@@ -125,6 +125,13 @@ export class GameView {
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
+  // 触屏：用 pointerId 区分每一根手指，避免「最后一个触摸覆盖前一个」。
+  // 鼠标仍走单指路径，桌面行为一字不改。
+  private activePointers = new Map<number, { x: number; y: number }>();
+  private pinching = false;
+  private lastPinchDist = 0;
+  private lastPinchMid = { x: 0, y: 0 };
+
   time = 0;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -735,7 +742,22 @@ export class GameView {
     window.addEventListener('blur', () => this.keys.clear());
 
     this.canvas.addEventListener('pointerdown', (ev) => {
+      this.canvas.setPointerCapture(ev.pointerId);
+      this.activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       this.pointer = { x: ev.clientX, y: ev.clientY };
+      if (this.activePointers.size === 2) {
+        // 第二根手指落下：进入捏合模式，记下初始间距与中点
+        this.pinching = true;
+        const pts = [...this.activePointers.values()];
+        this.lastPinchDist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
+        this.lastPinchMid = {
+          x: (pts[0]!.x + pts[1]!.x) / 2,
+          y: (pts[0]!.y + pts[1]!.y) / 2,
+        };
+        this.moved = 99; // 捏合结束后不当成点击
+        return;
+      }
+      if (this.activePointers.size > 2) return;
       this.lastPointer = { x: ev.clientX, y: ev.clientY };
       this.moved = 0;
       this.dragging = true;
@@ -743,7 +765,22 @@ export class GameView {
     });
 
     this.canvas.addEventListener('pointermove', (ev) => {
+      if (this.activePointers.has(ev.pointerId)) {
+        this.activePointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      }
       this.pointer = { x: ev.clientX, y: ev.clientY };
+      if (this.pinching && this.activePointers.size >= 2) {
+        const pts = [...this.activePointers.values()];
+        const dist = Math.hypot(pts[0]!.x - pts[1]!.x, pts[0]!.y - pts[1]!.y);
+        const mid = { x: (pts[0]!.x + pts[1]!.x) / 2, y: (pts[0]!.y + pts[1]!.y) / 2 };
+        // 捏合：间距变化映射到缩放（复用 wheel 的 zoomBy 通路）；中点平移镜头
+        if (this.lastPinchDist > 0) this.zoomBy((this.lastPinchDist - dist) * 0.06);
+        this.panBy(mid.x - this.lastPinchMid.x, mid.y - this.lastPinchMid.y);
+        this.lastPinchDist = dist;
+        this.lastPinchMid = mid;
+        return;
+      }
+      if (this.activePointers.size > 1) return; // 多指时不走单指平移
       if (!this.dragging) return;
       const dx = ev.clientX - this.lastPointer.x;
       const dy = ev.clientY - this.lastPointer.y;
@@ -754,13 +791,29 @@ export class GameView {
       }
     });
 
-    this.canvas.addEventListener('pointerup', () => {
-      this.dragging = false;
-      this.dragButton = -1;
-    });
+    const endPointer = (ev: PointerEvent): void => {
+      this.activePointers.delete(ev.pointerId);
+      if (this.canvas.hasPointerCapture(ev.pointerId)) this.canvas.releasePointerCapture(ev.pointerId);
+      if (this.pinching && this.activePointers.size < 2) {
+        // 捏合结束：剩余手指重新作为平移起点，避免跳变
+        this.pinching = false;
+        this.lastPinchDist = 0;
+        const rest = [...this.activePointers.values()][0];
+        if (rest) {
+          this.lastPointer = { x: rest.x, y: rest.y };
+          this.dragButton = -1;
+        }
+      } else if (this.activePointers.size === 0) {
+        this.dragging = false;
+        this.dragButton = -1;
+      }
+    };
+    this.canvas.addEventListener('pointerup', endPointer);
+    this.canvas.addEventListener('pointercancel', endPointer);
 
-    this.canvas.addEventListener('pointerleave', () => {
-      this.dragging = false;
+    this.canvas.addEventListener('pointerleave', (ev) => {
+      // 鼠标离开画布才停；触屏已用 pointer capture，不会被 leave 打断
+      if (ev.pointerType === 'mouse') this.dragging = false;
     });
 
     this.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());

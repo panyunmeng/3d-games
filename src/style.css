@@ -23,20 +23,25 @@ html,
 body {
   width: 100%;
   height: 100%;
+  height: 100dvh; /* 用动态视口高度，移动端浏览器地址栏伸缩时不裁底部 */
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #app {
   position: relative;
   width: 100%;
   height: 100%;
+  height: 100dvh;
 }
 
+/* 画布手势全部交给相机：单指拖动平移、双指捏合缩放，禁止浏览器滚动/缩放抢事件 */
 #viewport {
   position: absolute;
   inset: 0;
@@ -44,6 +49,7 @@ body {
   height: 100%;
   display: block;
   outline: none;
+  touch-action: none;
 }
 
 #ui {
@@ -72,8 +78,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center; /* 内容超高时退化为 flex-start，顶部不会被裁且可滚到 */
+  gap: 14px;
+  padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
   pointer-events: auto;
+  overflow: auto; /* 竖屏内容超高时可滚，卡片不被裁 */
+  -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(circle at 50% 42%, rgba(26, 62, 96, 0.22), transparent 64%),
     linear-gradient(180deg, rgba(3, 6, 10, 0.62), rgba(3, 6, 10, 0.88));
@@ -201,6 +211,7 @@ body {
 
 .btn.small {
   font-size: 12px;
+  min-height: 44px;
   padding: 9px 14px;
   letter-spacing: 0.12em;
 }
@@ -220,8 +231,11 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   width: min(1080px, 92vw);
-  margin-bottom: 22px;
+  flex-shrink: 0;
+  margin-bottom: 8px;
 }
 
 .page-head h2 {
@@ -248,6 +262,7 @@ body {
   font-family: inherit;
   font-size: 12px;
   letter-spacing: 0.2em;
+  min-height: 44px;
   padding: 8px 18px;
   color: var(--muted);
   background: rgba(12, 20, 30, 0.8);
@@ -267,6 +282,7 @@ body {
   grid-template-columns: repeat(3, 1fr);
   gap: 18px;
   width: min(1080px, 92vw);
+  flex-shrink: 0;
 }
 
 .level-card {
@@ -500,8 +516,10 @@ body {
   pointer-events: auto;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.1em;
+  min-width: 44px;
+  min-height: 44px;
   padding: 7px 10px;
   color: var(--muted);
   background: rgba(10, 16, 24, 0.9);
@@ -523,8 +541,8 @@ body {
   pointer-events: auto;
   cursor: pointer;
   font-family: inherit;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   font-size: 14px;
@@ -938,6 +956,8 @@ input[type="range"]::-webkit-slider-thumb {
   cursor: pointer;
   font-family: inherit;
   font-size: 12px;
+  min-height: 44px;
+  min-width: 44px;
   padding: 7px 14px;
   color: var(--muted);
   background: transparent;
@@ -1039,5 +1059,366 @@ input[type="range"]::-webkit-slider-thumb {
   }
   .tower-card {
     width: 100px;
+  }
+}
+
+/* ==========================================================================
+   移动端适配（只改 UI / 输入 / 样式，不碰模拟层与数值）
+   断点取舍：
+     - ≤680px 且竖屏：主战场，HUD 收成上下两条窄带，中心留给塔/敌人/金币。
+     - ≤820px 且横屏：战场满幅，控件压到边缘，高度优先给画面。
+     - 桌面 1440×900：以上都不命中，维持原布局，不退化。
+   ========================================================================== */
+
+/* 主菜单/选关/设置：字号与可点尺寸在窄屏收敛，正文仍是滚动容器 */
+@media (max-width: 680px) {
+  .menu-brand {
+    margin-bottom: 24px;
+  }
+  .menu-brand h1 {
+    font-size: 42px;
+  }
+  .brand-kicker,
+  .brand-en {
+    font-size: 11px;
+    letter-spacing: 0.32em;
+  }
+  .menu-buttons {
+    width: min(300px, 86vw);
+  }
+  /* 主菜单四个按钮至少 50px 高，纵向可滚不裁切 */
+  .menu-buttons .btn {
+    min-height: 50px;
+  }
+  .page-head {
+    width: 100%;
+  }
+  .page-head h2 {
+    font-size: 22px;
+  }
+  /* 选关卡片：窄屏单列，卡片本身不裁；整页滚动由 .screen 负责 */
+  .level-grid {
+    grid-template-columns: 1fr;
+    width: 100%;
+    gap: 14px;
+  }
+  .level-card {
+    min-height: 168px;
+    padding: 16px;
+  }
+  .level-name {
+    font-size: 20px;
+  }
+  .level-desc {
+    font-size: 11px;
+  }
+  /* 设置面板：纵向排列，滑杆可点，返回按钮足够大 */
+  .dialog {
+    padding: 20px 18px;
+    gap: 14px;
+  }
+  input[type="range"] {
+    width: min(200px, 42vw);
+    height: 24px; /* 扩大触摸命中，视觉细条用 thumb 呈现 */
+  }
+  .settings-row {
+    font-size: 12px;
+    gap: 10px;
+  }
+}
+
+/* ---------- 竖屏：上下窄带 HUD，绝不压战场中心 ---------- */
+@media (max-width: 680px) and (orientation: portrait) {
+  .hud-top {
+    /* 上带：关卡名 + 波次 + 金币/生命 + 倍速/暂停，两条内挤在一行 */
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: calc(6px + env(safe-area-inset-top)) 8px 4px;
+  }
+  .hud-block {
+    gap: 8px;
+    padding: 4px 8px;
+  }
+  .hud-level {
+    padding: 3px 8px;
+  }
+  .hud-level .name {
+    font-size: 12px;
+  }
+  .hud-level .meta {
+    font-size: 9px;
+  }
+  .hud-wave {
+    order: 3; /* 波次进度条独占第二行，第一行只放数值与倍速 */
+    flex: 1 1 100%;
+    max-width: none;
+    padding: 4px 8px;
+    gap: 3px;
+  }
+  .wave-row {
+    font-size: 11px;
+  }
+  .wave-row strong {
+    font-size: 12px;
+  }
+  /* 「开始下一波」按裁决归入下带：绝对定位到塔栏上方左侧，
+     既满足 44px 触摸目标，又不占战场中心、不压右下角平台位 */
+  .wave-actions {
+    position: fixed;
+    left: 8px;
+    bottom: calc(154px + env(safe-area-inset-bottom));
+    z-index: 25;
+  }
+  .wave-actions .btn {
+    min-height: 44px;
+    padding: 6px 12px;
+  }
+  .hud-right {
+    order: 2;
+    margin-left: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 3px 6px;
+  }
+  .stat {
+    font-size: 13px;
+    gap: 3px;
+  }
+  .stat .ico {
+    font-size: 11px;
+  }
+  /* 倍速按钮随上带走，不再压右下角；右下 12px 整块留给平台「返回平台」 */
+  .speed-group button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 6px;
+    font-size: 12px;
+  }
+
+  /* 下带：塔栏横向铺满；底部留 46px 给平台注入的「← 返回平台」（right/bottom 12px），
+     使塔卡不进入右下角那块 100×26px 区域 */
+  .hud-bottom {
+    padding: 4px 8px calc(46px + env(safe-area-inset-bottom));
+    align-items: flex-end;
+  }
+  .tower-bar {
+    width: 100%;
+    gap: 6px;
+  }
+  .tower-card {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    min-height: 74px; /* 触摸目标远大于 44px */
+    padding: 6px 4px;
+    gap: 2px;
+  }
+  .tower-swatch {
+    height: 22px;
+    margin-bottom: 2px;
+  }
+  .tower-glyph {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+  .tower-key {
+    display: none; /* 触屏没有数字键，收掉提示省空间 */
+  }
+  .tower-name {
+    font-size: 11px;
+    letter-spacing: 0;
+  }
+  .tower-role {
+    display: none;
+  }
+  .tower-cost {
+    font-size: 11px;
+  }
+
+  /* 选中塔面板与「取消选择」：贴下带上方右侧，避开战场中心与右下角平台位 */
+  .sel-panel {
+    right: 8px;
+    bottom: calc(160px + env(safe-area-inset-bottom));
+    width: min(232px, 62vw);
+    padding: 10px;
+    gap: 8px;
+  }
+  .sel-actions {
+    flex-wrap: wrap;
+  }
+  .sel-actions .btn {
+    min-height: 44px;
+    flex: 1 1 44%;
+  }
+  /* 取消按钮：独立成行，满足 44px，不挡战场中心 */
+  .sel-actions .btn.sel-cancel {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+
+  /* 提示改为贴在上带下方的单行：绝不浮到下带压塔卡上沿。
+     原因：底部定位时提示条 y=659～716、塔卡 y=692 起，重叠 24px 盖住卡顶文字。 */
+  .hud-hint {
+    top: calc(184px + env(safe-area-inset-top));
+    bottom: auto;
+    font-size: 11px;
+    padding: 4px 8px;
+    max-width: 96vw;
+    white-space: nowrap; /* 触屏提示压成一行，避免换行增高重新压到下带 */
+    text-align: center;
+  }
+  .wave-preview {
+    /* 贴在上带下方第一条，避免与金币/生命/倍速那一行重叠 */
+    top: calc(154px + env(safe-area-inset-top));
+    max-width: 96vw;
+    font-size: 10px;
+    padding: 4px 8px;
+    gap: 6px;
+  }
+  .boss-bar {
+    top: calc(214px + env(safe-area-inset-top));
+    width: 92vw;
+    padding: 5px 10px 7px;
+  }
+  .boss-name {
+    font-size: 10px;
+  }
+  .fps-readout {
+    right: 8px;
+    bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+  .toast {
+    top: calc(256px + env(safe-area-inset-top));
+    font-size: 11px;
+    padding: 7px 12px;
+    max-width: 92vw;
+    white-space: normal;
+    text-align: center;
+  }
+  .banner .big {
+    font-size: 30px;
+  }
+  /* 结算弹窗纵向可滚，按钮 ≥44 */
+  .overlay {
+    padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom);
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .result-stars {
+    font-size: 34px;
+  }
+  .dialog .row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- 横屏：战场满幅，控件收进边缘 ---------- */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hud-top {
+    padding: calc(4px + env(safe-area-inset-top)) 8px 2px;
+    gap: 8px;
+  }
+  .hud-block {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+  .hud-level .name {
+    font-size: 12px;
+  }
+  .hud-level .meta {
+    font-size: 9px;
+  }
+  .hud-wave {
+    max-width: 280px;
+    padding: 4px 8px;
+    gap: 3px;
+  }
+  .wave-row {
+    font-size: 11px;
+  }
+  .wave-actions .btn {
+    min-height: 44px;
+    padding: 5px 10px;
+  }
+  .stat {
+    font-size: 13px;
+  }
+  /* 底部收成一条：塔卡压扁、面板贴边，中间大片留给战场 */
+  .hud-bottom {
+    padding: 2px 8px calc(4px + env(safe-area-inset-bottom));
+  }
+  .tower-card {
+    width: 88px;
+    min-height: 60px;
+    padding: 4px 6px;
+  }
+  .tower-swatch {
+    height: 16px;
+    margin-bottom: 2px;
+  }
+  .tower-glyph {
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+  }
+  .tower-role {
+    display: none;
+  }
+  .tower-name {
+    font-size: 11px;
+  }
+  .tower-cost {
+    font-size: 11px;
+  }
+  .sel-panel {
+    right: 8px;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    width: min(252px, 40vw);
+    padding: 8px;
+    gap: 6px;
+  }
+  .sel-actions .btn {
+    min-height: 44px;
+  }
+  .sel-actions .btn.sel-cancel {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+  .wave-preview {
+    top: calc(52px + env(safe-area-inset-top));
+  }
+  .boss-bar {
+    top: calc(50px + env(safe-area-inset-top));
+  }
+  .hud-hint {
+    /* 横屏同样从底部抬到不与塔卡相交：bottom 84 → y≈284～306，塔卡 top 320，
+       留 14px 间隙；比放顶部更省战场空间。 */
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    font-size: 10px;
+    padding: 3px 10px;
+    white-space: nowrap;
+  }
+  .toast {
+    top: calc(54px + env(safe-area-inset-top));
+  }
+  .banner .big {
+    font-size: 30px;
+  }
+  .menu-brand {
+    margin-bottom: 12px;
+  }
+  .menu-brand h1 {
+    font-size: 40px;
+  }
+}
+
+/* 平台右下角「返回平台」浮层预留区：任何 HUD 控件都不进入此 12px 见方角 */
+@media (max-width: 680px), (max-height: 500px) {
+  .hud-right,
+  .speed-group,
+  .icon-btn,
+  .sel-panel {
+    margin-right: 12px;
   }
 }

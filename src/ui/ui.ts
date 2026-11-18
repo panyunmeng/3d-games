@@ -309,14 +309,14 @@ export class UI {
         <h2 style="font-size:22px">操 作 说 明</h2>
         <div class="sub">CONTROLS</div>
         <div class="result-stats" style="grid-template-columns:1fr">
-          <div class="result-stat"><span>选择塔型</span><b>数字键 1 ～ 4 / 点击底部卡片</b></div>
-          <div class="result-stat"><span>建造</span><b>左键点击发光的建造点</b></div>
-          <div class="result-stat"><span>选中 / 取消</span><b>左键点塔 · 右键或 Esc 取消</b></div>
-          <div class="result-stat"><span>升级 / 出售</span><b>U / X（或在选中面板里点）</b></div>
-          <div class="result-stat"><span>提前召唤</span><b>点击「开始下一波」拿金币奖励</b></div>
-          <div class="result-stat"><span>暂停 / 倍速</span><b>空格 / 1×2×3× 按钮</b></div>
-          <div class="result-stat"><span>移动 / 缩放镜头</span><b>WASD 或右键拖拽 / 滚轮</b></div>
-          <div class="result-stat"><span>镜头复位</span><b>R</b></div>
+          <div class="result-stat"><span>选择塔型</span><b>点底部卡片 / 数字键 1～4</b></div>
+          <div class="result-stat"><span>建造</span><b>点发光的建造点（触屏直接点）</b></div>
+          <div class="result-stat"><span>选中 / 取消</span><b>点塔选中 · 点空白处或「取消选择」</b></div>
+          <div class="result-stat"><span>升级 / 出售</span><b>选中面板里点（或 U / X）</b></div>
+          <div class="result-stat"><span>提前召唤</span><b>点「开始下一波」拿金币奖励</b></div>
+          <div class="result-stat"><span>暂停 / 倍速</span><b>顶部 ❚❚ / 1×2×3×（或空格）</b></div>
+          <div class="result-stat"><span>移动镜头</span><b>单指拖动 / WASD / 右键拖拽</b></div>
+          <div class="result-stat"><span>缩放镜头</span><b>双指捏合 / 滚轮</b></div>
         </div>
         <div class="row"><button class="btn primary" data-act="help-close">知 道 了</button></div>
       </div>
@@ -575,7 +575,8 @@ export class UI {
     this.el.result.classList.add('hidden');
     this.el.pause.classList.add('hidden');
     this.showScreen('game');
-    this.showHint('1～4 选择塔型 · 左键点击建造点建塔 · 空格暂停', 9);
+    // 触屏提示压到一行：375px 竖屏下不换行，避免浮到下带压住塔卡上沿
+    this.showHint('点卡片选塔 · 点建造点建塔 · 拖动平移 · 双指缩放', 7);
     this.syncSpeedButtons();
     this.syncArmed();
     this.update(sim);
@@ -864,12 +865,17 @@ export class UI {
               : '<button class="btn" disabled>已满级</button>'
           }
           <button class="btn ghost" id="sel-sell">出售 ◆${refund}</button>
+        </div>
+        <div class="sel-actions">
+          <button class="btn ghost sel-cancel" id="sel-cancel">取 消 选 择</button>
         </div>`;
       this.hudEls.selPanel.classList.remove('hidden');
       const up = this.hudEls.selPanel.querySelector<HTMLButtonElement>('#sel-upgrade');
       if (up) up.addEventListener('click', () => this.bridge.upgradeSelected());
       const sell = this.hudEls.selPanel.querySelector<HTMLButtonElement>('#sel-sell');
       if (sell) sell.addEventListener('click', () => this.bridge.sellSelected());
+      const cancel = this.hudEls.selPanel.querySelector<HTMLButtonElement>('#sel-cancel');
+      if (cancel) cancel.addEventListener('click', () => this.bridge.deselect());
     }
   }
 

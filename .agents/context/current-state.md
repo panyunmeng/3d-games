@@ -83,3 +83,103 @@
 - 二期：把 `dist/` 部署到 NAS（需要用户给静态目录与端口），可选加 HTTPS 反代。
 - 手感细节：BOSS 出场位置贴近出生点边界，可能需要把出生点往场内挪；卡片底部间距再收一点。
 - 内容扩展（可选）：塔分支升级、更多地图、每日挑战。
+
+## 2026-11-18 22:45 — 移动端适配（触屏 + 响应式 HUD + 竖屏可玩）
+
+> 用户裁决口径：触屏操控 + 响应式 HUD + 375×812 竖屏可完整玩一局，桌面 1440×900 不退化。
+> 硬边界：只改 UI / 输入 / 样式；`src/game/simulation.ts` 与 `src/data/` 零改动。
+
+### 触屏入口与怎么触发
+
+| 操作 | 入口 | 实现依据 |
+| --- | --- | --- |
+| 建塔 | 点发光建造点 | 复用既有 `pointerup`（触屏 `button===0` 天然通用），未重写一套鼠标逻辑 |
+| 选中塔 | 点塔 / 点已占用建造点 | 同上，`pickTower` / `pickPad` 都是屏幕坐标投射，不依赖 pointerType |
+| 取消选择 | 点空白处 / 选中面板「取 消 选 择」按钮 | 新增按钮，210×44px，绑定 `bridge.deselect()` |
+| 升级 / 出售 | 选中面板两个按钮 | 既有按钮，竖屏/横屏内 min-height 44px |
+| 单指拖动平移 / 双指捏合缩放 | 画布直接手势 | `view.ts` 的 `bindEvents` 改为 pointerId 跟踪的多指状态机；捏合复用 `zoomBy`（与 wheel 同一通路），中点位移复用 `panBy`；鼠标路径一字未改 |
+| 暂停 / 倍速 | 顶部 ❚❚ / 1×2×3× | 均 ≥44px，随上带走 |
+
+画布 `touch-action: none`，index.html 加 `viewport-fit=cover` 与禁整页缩放（双指手势归相机）。
+
+### 断点与布局取舍
+
+- `≤680px && portrait`：上带两行（行1 关卡名 + 金币/生命 + 倍速/暂停；行2 波次进度），
+  下带塔栏 4 等分；「开始下一波」固定到塔栏上方左侧 44px。
+  实测上带底 148px、下带顶 688px，中间 540px 战场中心 **零 HUD 命中**。
+  下带底部留 46px 空白 → 右下角 (363,800) 探测命中 CANVAS，
+  平台注入的「← 返回平台」(right/bottom 12px, 约 100×26px) 有干净落点，倍速已从右下彻底移走。
+- `≤500px && landscape`：战场满幅，上下带压到 89px / 72px，塔卡 88px 宽，提示贴底带上方避开中心。
+- 桌面 1440×900 不命中任何移动端媒体查询，原布局保持；`.screen` 改可滚 + `justify-content:safe center` 对桌面无视觉影响。
+- 选关页：`.screen` 加 `overflow:auto` + `-webkit-overflow-scrolling:touch`，卡片单列 min-height 168px
+  （三张 177px + 间距，总高 < 812 全部可见；视口再矮时仍可滚，不裁切）。
+
+### 验证结论（全部真跑）
+
+- `pnpm typecheck`：无输出，退出 0。
+- `pnpm build`：成功，CSS 18.52 kB (gzip 4.59)、JS 652.17 kB (gzip 167.90)。
+- `mobile-check --enter=...进战场`：3/3 PASS，err=0 overflowX=0 cover=100.0% **minTap=50px** touch-action=**none**。
+- `mobile-check --enter` 只到选关页：3/3 PASS；CDP 探针实测三张卡片 top 151/342/532、bottom 328/518/709，
+  全部在 812 视口内，OPERATION 02/03 可直接看到（更矮视口下 `.screen` 可滚）。
+- HUD 几何探针：竖屏上带 0～148、下带 688～812，战场中心 20%～80% 宽 × 25%～75% 高命中 0 处；
+  横屏上带 0～89、下带 318～390，中心 20%～80% 宽 × 25%～75% 高命中 0 处；桌面无变化。
+- 触屏端到端探针：模拟真实 touch 点建造点 → 塔 0→1、金币 320→220、选中 id=1；
+  双指捏合 → camDist 51.6→57.6；全程 0 异常；捏合不误触建造。
+- `pnpm tsx tools/balance.ts`：9 条结论行与改动前逐字一致（简单全通、普通全通/1～2 漏、困难第1/3关第8波失守），
+  证明只动 UI/输入未碰数值。
+- `git diff --name-only` 仅 4 个文件：index.html、src/render/view.ts、src/style.css、src/ui/ui.ts；src/game、src/data 零改动。
+
+### 已知不足
+
+- 本会话模型不支持 `read_image`，**没能用视觉通道直接看 `td-portrait-play.png`**；
+  遮挡结论靠 CDP 几何探针（上/下带与中心矩形无交）与 mobile-check 的 canvas 覆盖率佐证，非肉眼确认。
+- 捏合以两指间距线性映射缩放，未做惯性/边界回弹；够用但不如原生地图顺滑。
+- 选中塔面板是点击后的临时浮层（贴右侧，非持久 HUD）；选中瞬间会盖住右侧一小块战场，
+  但用户可点「取消选择」或空白处立刻收起。
+- 横屏矮屏下 BOSS 血条、敌人预览与 toast 仍集中在顶部窄条，极端密集波次时可能叠字
+  （均 pointer-events:none，不影响操作；几何探针确认当前默认态中心无遮挡）。
+
+## 2026-11-18 22:55 — 修掉竖屏底部提示条与塔卡重叠
+
+### 原因（lead 复核发现，真实遮挡）
+
+第一版把 `.hud-hint` 用 `bottom` 定位在竖屏下带上方，实测 rect：
+提示条 x=94 y=659 w=188 h=57 bottom=716；塔卡 y=692 h=74 bottom=766。
+提示条下沿 716 越过塔卡上沿 692 共 24px，盖住「加/榴/电/激」卡顶文字。
+`pointer-events:none` 只解决点击穿透，玩家看不见卡顶文字仍是坏 UI，必须改布局。
+横屏同类问题：提示条 bottom=318、塔卡 top=320，加 8px 间隙判定仍相交。
+
+### 改法与理由
+
+- 方案选「触屏提示改成单行紧凑，竖屏贴到上带下方；横屏从底部抬高」，不用「几秒后隐藏」回避问题——
+  显示期间本身就不能压卡；也不只是加 `pointer-events:none`。
+- `ui.ts`：进场提示文案压成一行（"点卡片选塔 · 点建造点建塔 · 拖动平移 · 双指缩放"），时长 9s → 7s。
+- `style.css` 竖屏：`.hud-hint` 由 `bottom:96px` 改为 `top:184px`（预览条 154～178 之下）、
+  `white-space:nowrap`、单行 h≈25px；BOSS 血条 186 → 214、toast 230 → 256 顺延让位。
+- `style.css` 横屏：`.hud-hint` bottom 72 → 84（y≈284～306，塔卡 top 320），`white-space:nowrap`。
+
+### 验证（CDP 真实 rect，修复后）
+
+```
+竖屏 375×812:
+  hint  {x:37,  y:184, w:302, h:25, bottom:209}
+  card  {x:8,   y:692, w:85,  h:74, bottom:766}
+  hint.bottom + 8 = 217 <= card.top 692  → NO 相交
+  elementFromPoint(363,800) = CANVAS（右下 46px 平台区仍干净）
+
+横屏 844×390:
+  hint  {x:282, y:284, w:280, h:22, bottom:306}
+  card  {x:8,   y:320, w:88,  h:66, bottom:386}
+  hint.bottom + 8 = 314 <= card.top 320  → NO 相交
+  elementFromPoint(832,378) = CANVAS
+```
+
+- `pnpm typecheck`：无输出，退出 0。
+- `pnpm build`：成功，CSS 18.56 kB (gzip 4.60)、JS 652.15 kB (gzip 167.90)。
+- `mobile-check --enter 进战场`：3/3 PASS，err=0 overflowX=0 cover=100.0% minTap=50px touch-action=none。
+- 数值层仍未改（本轮只动 ui.ts + style.css）。未 commit/push。
+
+### 已知不足
+
+- 竖屏 BOSS 血条/toast 顺延到 y214/y256，极端密集波次时仍可能和顶部预览叠字（均 pointer-events:none）。
+- 本会话模型不支持 `read_image`，遮挡结论仍是几何探针而非肉眼确认。
