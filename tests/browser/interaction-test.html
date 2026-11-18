@@ -109,6 +109,59 @@ async function doubleClick(x, y) {
   await wait(300);
 }
 
+/** 派发触屏指针事件（pointerType=touch，button 恒为 0），用于触屏手势回归。 */
+function touch(type, x, y, pointerId = 11) {
+  const win = frame.contentWindow;
+  const ev = new win.PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+    pointerId,
+    pointerType: 'touch',
+    isPrimary: pointerId === 11,
+  });
+  canvasOf().dispatchEvent(ev);
+}
+
+/**
+ * 模拟一次触屏长按：down → 等 > LONG_PRESS_MS(400) → up。
+ * 等 460ms 保证越过 400ms 阈值，再等 200ms 看抬起后有没有误挖。
+ */
+async function longPress(x, y, pointerId = 11) {
+  touch('pointerdown', x, y, pointerId);
+  // 等 > 400ms 阈值；用 1100ms 兼容后台标签页把 setTimeout 节流到 ~1s 的情况
+  await wait(1100);
+  touch('pointerup', x, y, pointerId);
+  await wait(220);
+}
+
+/** 双指轻点同一格：两指 down→up，间距/位移都极小，应走和弦语义。 */
+async function twoFingerTap(x, y) {
+  touch('pointerdown', x, y, 11);
+  touch('pointerdown', x, y, 12);
+  await wait(60);
+  touch('pointerup', x, y, 12);
+  touch('pointerup', x, y, 11);
+  await wait(220);
+}
+
+/** 双指捏合张开：间距变化远超 12px，应缩放而不是挖开/旋转。 */
+async function pinchApart(cx, cy) {
+  touch('pointerdown', cx - 40, cy, 11);
+  touch('pointerdown', cx + 40, cy, 12);
+  for (let i = 1; i <= 5; i++) {
+    touch('pointermove', cx - 40 - i * 10, cy, 11);
+    touch('pointermove', cx + 40 + i * 10, cy, 12);
+    await wait(20);
+  }
+  touch('pointerup', cx - 90, cy, 11);
+  touch('pointerup', cx + 90, cy, 12);
+  await wait(220);
+}
+
 async function drag(fromX, fromY, toX, toY) {
   pointer('pointerdown', fromX, fromY, 0);
   const steps = 6;
@@ -183,6 +236,30 @@ async function run() {
   check('重开后完成度', hud('progress-text'), '0%');
   check('重开后剩余雷数', flagCount(), 10);
   check('重开后练习局标记隐藏', isHidden('chip-assisted'), true);
+
+  // ── 触屏专项（移动端适配）──────────────────────────────
+  // 此时刚重开：全盘未挖，剩余雷数 10，完成度 0%。
+  // 9) 长按插旗生效：触屏 down 保持 >400ms 再 up，应插旗（剩余雷数 10→9）
+  await longPress(640, 430);
+  check('长按插旗后剩余雷数', flagCount(), 9);
+  // 10) 长按抬起绝不误挖：完成度必须仍是 0%
+  check('长按抬起不误挖（完成度仍为 0）', progress(), 0);
+  // 11) 再次长按撤旗：剩余雷数回到 10
+  await longPress(640, 430);
+  check('再次长按撤旗后剩余雷数', flagCount(), 10);
+  // 12) 双指捏合不抛异常且不误挖（缩放走 stage.zoomBy，不触发 reveal）
+  const beforePinch = progress();
+  await pinchApart(640, 430);
+  check('双指捏合不挖开', progress(), beforePinch);
+  // 13) 触屏轻点能挖开（为双指轻点和弦准备一个已挖开的 0 格）
+  touch('pointerdown', 640, 430, 11);
+  touch('pointerup', 640, 430, 11);
+  await wait(220);
+  const afterTouchReveal = progress();
+  check('触屏轻点能挖开', afterTouchReveal > 0, true);
+  // 14) 双指轻点已挖开的 0 格：和弦空操作，不改变完成度、不报错
+  await twoFingerTap(640, 430);
+  check('双指轻点已挖开格不改变完成度', progress(), afterTouchReveal);
 
   // 10) 滚轮不抛异常
   let wheelOk = true;

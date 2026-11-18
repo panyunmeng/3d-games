@@ -57,3 +57,27 @@
 
 - 前面两处「待办」均已完成：本地 git + Gitea 远端已推送，`docs/screenshot.png` 已换成带旗帜的对局截图。
 - 剩余唯一未做项：触屏交互（长按插旗、双指缩放），按需求收集时的选择「桌面端」保持范围外，不算缺口。
+
+## 2026-11-18 22:25 — 移动端适配（task-4）
+
+- 用户裁决口径：触屏操控 + 响应式 HUD + 竖屏可玩，桌面 1440×900 不退化。容器层共享规范 `.agents/context/mobile-spec.md`。
+- 改动文件清单（只改 `3D扫雷/` 内，零 DOM/three 规则层 `src/logic.js` 一行未动）：
+  - `src/main.js`：新增 Pointer Events 触屏分支，与既有鼠标分支并存。
+  - `styles.css`：新增 `@media (pointer:coarse)` 把图标/按钮抬到 44px；`@media (max-width:520px)` 竖屏 HUD 两行网格（信息行 + 6 图标按钮整行），`@media (max-height:460px) and (orientation:landscape)` 横屏矮屏收紧；`#app` 用 `100dvh` + `env(safe-area-inset-*)`。
+  - `index.html`：菜单规则列表加一条触屏说明（`.touch-only`，仅粗指针显示）。
+  - `tests/browser/interaction-test.html`：新增触屏 helper（touch / longPress / twoFingerTap / pinchApart）与 6 项触屏用例；总项数 18 → 24。
+  - `docs/需求规格-v0.1.md`：交互表补 I9/I10/I11（长按插旗、双指轻点和弦、双指捏合缩放），从「明确不做」移除触屏条目。
+- **长按阈值 = 400ms**，理由（第一性原则）：规范给 350～450ms 取中段；快速点按挖开时长一般 <200ms，400ms 与它拉开一倍以上不误插旗；再长手指等待烦躁；且与既有 350ms 双击判定窗口分离，避免「想双击和弦」被长按抢走。
+  - **不误挖保证**：长按定时器到点即置 `drag.longPressFired = true` 并清掉 `lastClick`；`pointerup` 的触屏分支把 `longPressFired` 列为三条互斥出口之一（另两条：`moved`、场上还有别的指头），任一为真直接 `return`，绝不走到 `reveal(i)`。定时器内部还复核 `drag.id` / `touches.size` / `moved`，跨状态（换局/暂停/回菜单）由 `clearGestures()` 统一清掉在手手势。
+  - 长按对已挖开格走 `toggleFlag` → `logic.js` 返回 `revealed` 拒绝（与右键一致），不插旗也不挖开。
+- **和弦触屏路径 = 双指轻点该格**：选它而非「长按数字格」，因为 I9 已把长按统一给插旗（已挖开格也按 toggleFlag 语义），长按不能再挪作和弦。判据：两指间距变化 ≤12px、各自位移 ≤10px、时长 ≤450ms；走既有 `doChord`。
+- **缩放 = 双指捏合**：间距变化 >12px 才按增量调 `stage.zoomBy`；`pointermove` 在双指分支里 `return`，不 orbit、不 hover 拾取；`pointermove` 的 hover 回调也加了 `touches.size > 1` 守卫；`pointerup` 双指分支单独处理（轻点和弦 or 空操作），不落到单指挖开逻辑。
+- 验证结论：
+  - `node --test "tests/*.test.mjs"`：**20/20 pass**（logic.js 未改，规则单测保持原数）。
+  - `mobile-check.mjs --name minesweeper --dir "3D扫雷" --enter "document.querySelector('#levels .level-card, #levels button').click()"`：三视口 **3/3 PASS**，err=0 / overflowX=0 / cover=100% / minTap=114～116px（≥44）；截图落 `.agents/work/mobile/minesweeper-{portrait,landscape,desktop}[-play].png`。
+  - 浏览器回归页（CDP 打开，`node scripts/serve.mjs 5502`）：**PASS 24/24**（原 18 项全保留，新增 6 项触屏用例全绿）。
+  - 375×812 对局态 DOM 实测：6 个 HUD 图标按钮均 **44×44px**、全部在视口内、HUD 仅占顶部 112px（13.8%）；对截图做像素分析：棋盘横向 CSS x34～330、纵向 y300～530，完整落在 HUD 下方且无横向裁切。本模型无图像输入通道，`read_image` 返回"model does not declare image input"，改以 DOM 量测 + 像素统计替代目视验收。
+- 已知不足：
+  - `minTap` 数值（114～116px）是在菜单态量的（HUD 此时隐藏），量到的最大值来自难度卡片而非图标按钮；图标按钮的 44×44 由单独的对局态 DOM 实测确认。
+  - 三指及以上手势被显式忽略（不解释任何棋盘操作），避免半截手势误触发；此为取舍，非缺陷。
+  - 双指轻点与捏合的区分依赖 12px/10px 位移阈值，极小幅度的「轻点+微抖」理论上可能被判成轻点而非缩放，实测中未复现。
