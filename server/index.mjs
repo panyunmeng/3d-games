@@ -146,6 +146,21 @@ function backOverlay(prefix) {
     a.href = HOME;
     a.textContent = '\\u2190 \\u8fd4\\u56de\\u5e73\\u53f0';
     a.setAttribute('aria-label', '\\u8fd4\\u56de 3D \\u6e38\\u620f\\u5e73\\u53f0');
+    /**
+     * 触屏与桌面两套尺寸。
+     *
+     * 为什么不能只写一套：桌面 7px 内边距 + 12px 字 = 约 28px 高，这是刻意的，
+     * 不抢画面；但手机端 28px 远低于 44px 的可点下限，实测按不准。
+     * 用 matchMedia 而不是 CSS 媒体查询，是因为这些样式是内联 + !important，
+     * 内联样式里写不了 @media；判断放在 mount 时做一次即可。
+     *
+     * 触屏额外把默认不透明度提到 .82：桌面有 hover 可以「悬停才显形」，
+     * 触屏没有 hover，.55 会让按钮在手机上看不清、不知道该点哪。
+     */
+    var coarse = false;
+    try {
+      coarse = window.matchMedia('(pointer: coarse)').matches;
+    } catch (e) { /* 老浏览器没有 matchMedia，按桌面处理 */ }
     a.style.cssText = [
       'position:fixed !important',
       'right:calc(12px + env(safe-area-inset-right, 0px)) !important',
@@ -153,8 +168,10 @@ function backOverlay(prefix) {
       'z-index:2147483646 !important',
       'display:inline-flex !important',
       'align-items:center !important',
+      'justify-content:center !important',
       'gap:6px !important',
-      'padding:7px 13px !important',
+      coarse ? 'min-height:44px !important' : '',
+      coarse ? 'padding:0 16px !important' : 'padding:7px 13px !important',
       'border-radius:999px !important',
       'background:rgba(12,16,26,.82) !important',
       'color:#e8ecf6 !important',
@@ -165,19 +182,20 @@ function backOverlay(prefix) {
       'backdrop-filter:blur(8px) !important',
       '-webkit-backdrop-filter:blur(8px) !important',
       'box-shadow:0 4px 16px -6px rgba(0,0,0,.6) !important',
-      'opacity:.55 !important',
+      coarse ? 'opacity:.82 !important' : 'opacity:.55 !important',
       'transition:opacity .18s ease,transform .18s ease !important',
       'cursor:pointer !important',
       'pointer-events:auto !important',
       'user-select:none !important'
     ].join(';');
-    // 默认半透明，不抢游戏画面；悬停才完全显形
+    // 默认半透明，不抢游戏画面；悬停才完全显形。
+    // 触屏没有 hover，所以粗指针设备直接给 .82，避免手机上看不清这个按钮。
     a.addEventListener('mouseenter', function () {
       a.style.setProperty('opacity', '1', 'important');
       a.style.setProperty('transform', 'translateX(-2px)', 'important');
     });
     a.addEventListener('mouseleave', function () {
-      a.style.setProperty('opacity', '.55', 'important');
+      a.style.setProperty('opacity', coarse ? '.82' : '.55', 'important');
       a.style.setProperty('transform', 'none', 'important');
     });
     // 触屏没有 hover，按下时短暂显形
@@ -185,7 +203,7 @@ function backOverlay(prefix) {
       a.style.setProperty('opacity', '1', 'important');
     }, { passive: true });
     a.addEventListener('touchend', function () {
-      a.style.setProperty('opacity', '.55', 'important');
+      a.style.setProperty('opacity', coarse ? '.82' : '.55', 'important');
     }, { passive: true });
 
     // 挂到 body 最后，确保在游戏所有节点之后（同 z-index 时后来者在上）

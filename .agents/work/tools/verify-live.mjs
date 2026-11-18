@@ -1,6 +1,6 @@
 import { openPage } from './cdp.mjs';
 
-const BASE = 'http://panyunmeng.cn:8081';
+const BASE = process.env.BASE * 1 ? "http://127.0.0.1:" + process.env.BASE : "http://panyunmeng.cn:8081";
 const GAMES = [
   ['snake', 4500], ['tetris', 4000], ['breakout', 4000], ['minesweeper', 4000],
   ['sokoban', 4500], ['td', 5500], ['tank', 5000],
