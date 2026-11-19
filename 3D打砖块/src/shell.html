@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>3D 打砖块</title>
+<style>
+  :root{
+    --cyan:#5ee7ff;
+    --mint:#63f2b6;
+    --dim:#7f96b4;
+    --warn:#ff7a8a;
+    --card:rgba(10,16,28,.86);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;height:100%;overflow:hidden;
+    background:radial-gradient(125% 95% at 50% -10%, #111c33 0%, #070a14 52%, #0a0d16 100%);
+    color:#e8f4ff;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    touch-action:none;
+    -webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;touch-action:none;}
+
+  /* ---------- HUD ---------- */
+  #hud{
+    position:fixed;inset:0;pointer-events:none;
+    padding:calc(14px + env(safe-area-inset-top)) 18px 16px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  .stat{display:flex;flex-direction:column;gap:4px;line-height:1;}
+  .stat .lbl{font-size:10px;letter-spacing:.24em;color:var(--dim);}
+  .stat .val{
+    font-variant-numeric:tabular-nums;font-weight:800;
+    font-size:clamp(20px,3.4vw,30px);
+    text-shadow:0 0 16px rgba(94,231,255,.45);
+  }
+  .stat.center{align-items:center;text-align:center;}
+  .stat.right{align-items:flex-end;}
+  .lvl{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 12px;border-radius:999px;
+    border:1px solid rgba(94,231,255,.35);
+    background:rgba(94,231,255,.08);
+    font-size:12px;letter-spacing:.14em;color:#bfeaff;
+  }
+  .lvl b{font-size:14px;letter-spacing:0;}
+
+  .row2{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:22px;}
+  #lives{display:flex;gap:5px;font-size:15px;line-height:1;}
+  #lives i{font-style:normal;color:var(--warn);text-shadow:0 0 10px rgba(255,122,138,.6);transition:opacity .2s,transform .2s;}
+  #lives i.off{color:#33405a;text-shadow:none;transform:scale(.86);}
+  #buffs{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+  .buff{
+    font-size:11px;letter-spacing:.06em;padding:3px 9px;border-radius:999px;
+    border:1px solid currentColor;background:rgba(255,255,255,.04);
+    font-variant-numeric:tabular-nums;
+  }
+  .buff.wide{color:var(--mint);}
+  .buff.boost{color:#ffd24a;}
+  .buff.multi{color:#b06bff;}
+
+  #combo{
+    position:fixed;left:50%;top:20%;transform:translate(-50%,0);
+    font-size:clamp(18px,3.6vw,30px);font-weight:900;letter-spacing:.04em;
+    color:#ffe9a3;text-shadow:0 0 22px rgba(255,210,74,.65);
+    opacity:0;transition:opacity .18s;
+    pointer-events:none;
+  }
+  #combo.on{opacity:1;}
+
+  #footer{
+    position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom));
+    text-align:center;font-size:11.5px;letter-spacing:.12em;color:#6d84a3;
+    pointer-events:none;
+  }
+  #footer b{color:#a9c6e6;font-weight:600;}
+
+  /* ---------- 覆盖层 ---------- */
+  #overlay{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(60% 60% at 50% 45%,rgba(4,8,16,.55),rgba(2,4,9,.86));
+    backdrop-filter:blur(3px);
+    transition:opacity .22s;
+    padding:24px;
+  }
+  #overlay.hide{opacity:0;pointer-events:none;}
+  .card{
+    width:min(520px,92vw);padding:26px 28px 22px;border-radius:20px;
+    background:var(--card);
+    border:1px solid rgba(94,231,255,.22);
+    box-shadow:0 30px 90px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.06);
+    text-align:center;
+  }
+  .card h1{
+    margin:0 0 6px;font-size:clamp(24px,5vw,34px);letter-spacing:.03em;
+    background:linear-gradient(180deg,#ffffff,#8fe6ff 70%,#4fc7ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .card p{margin:0;color:#9ab4d2;font-size:13.5px;line-height:1.7;letter-spacing:.02em;}
+  .card .big{
+    margin:14px 0 4px;font-size:clamp(28px,7vw,44px);font-weight:900;
+    font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 0 26px rgba(94,231,255,.5);
+  }
+  .card .meta{display:flex;justify-content:center;gap:18px;margin:10px 0 0;font-size:12px;color:#7f96b4;}
+  .card .meta b{color:#cfe8ff;font-variant-numeric:tabular-nums;}
+  #ovBtn{
+    margin-top:20px;padding:12px 30px;border-radius:12px;cursor:pointer;
+    border:1px solid rgba(94,231,255,.55);
+    background:linear-gradient(180deg,rgba(94,231,255,.22),rgba(94,231,255,.06));
+    color:#e6faff;font-size:15px;font-weight:700;letter-spacing:.1em;
+    font-family:inherit;transition:transform .12s,box-shadow .18s,background .18s;
+    box-shadow:0 8px 26px rgba(94,231,255,.18);
+  }
+  #ovBtn:hover{background:linear-gradient(180deg,rgba(94,231,255,.34),rgba(94,231,255,.1));box-shadow:0 10px 34px rgba(94,231,255,.32);}
+  #ovBtn:active{transform:translateY(1px) scale(.99);}
+  #ovBtn.hide{display:none;}
+  .keys{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;
+    margin:18px 0 0;padding-top:16px;border-top:1px solid rgba(140,180,220,.14);
+    font-size:12px;color:#8aa2c0;text-align:left;
+  }
+  .keys span{display:flex;gap:8px;align-items:center;}
+  .keys kbd{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11px;padding:2px 6px;border-radius:8px;color:#cfe8ff;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 1px 0 rgba(0,0,0,.4);
+  }
+  #iconBar{
+    position:fixed;right:auto;left:calc(14px + env(safe-area-inset-left));
+    bottom:calc(12px + env(safe-area-inset-bottom));
+    display:flex;gap:8px;z-index:5;
+  }
+  #iconBar button{
+    width:48px;height:48px;border-radius:10px;cursor:pointer;padding:0;
+    display:grid;place-items:center;font-size:20px;line-height:1;
+    color:#bcd8f2;background:rgba(16,26,44,.82);
+    border:1px solid rgba(140,180,220,.22);
+    transition:background .16s,color .16s;
+    touch-action:manipulation;
+  }
+  #iconBar button:hover{background:rgba(28,44,72,.9);color:#fff;}
+  #iconBar button:active{background:rgba(94,231,255,.28);color:#fff;}
+  #iconBar button.off{color:#51617a;}
+
+  /* 主按钮触摸目标 ≥48px，窄屏面板收紧内边距、正文可滚动不裁切 */
+  #ovBtn{min-height:48px;}
+  @media (max-width:520px){
+    .keys{grid-template-columns:1fr;}
+    #footer{display:none;} /* 触屏窄屏：说明已在 overlay，底部右下留给平台返回键 */
+    #overlay{padding:12px;align-items:flex-start;overflow:auto;-webkit-overflow-scrolling:touch;}
+    .card{width:100%;max-width:100%;padding:16px 16px 14px;margin:auto 0;}
+    .card .big{margin:10px 0 2px;}
+    .keys{margin-top:12px;padding-top:12px;gap:6px 10px;}
+    #hud{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;gap:6px;}
+    .stat .val{font-size:20px;}
+    .stat .lbl{font-size:11px;}
+    .lvl{font-size:12px;padding:4px 10px;}
+  }
+  /* 横屏（含 844×390）：纵向空间紧张，收紧面板与 HUD 间距 */
+  @media (max-height:480px) and (orientation:landscape){
+    #overlay{padding:8px 12px;overflow:auto;-webkit-overflow-scrolling:touch;}
+    .card{padding:12px 16px 10px;}
+    .card h1{font-size:20px;margin-bottom:2px;}
+    .card p{font-size:12px;line-height:1.5;}
+    .card .big{font-size:26px;margin:8px 0 2px;}
+    .keys{margin-top:8px;padding-top:8px;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 10px;font-size:11px;}
+    #ovBtn{margin-top:10px;}
+    #footer{display:none;} /* 横屏低位空间给 iconBar / 平台返回键 */
+    #hud{padding:calc(8px + env(safe-area-inset-top)) 14px 8px;gap:4px;}
+    .stat .val{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div class="top">
+    <div class="stat"><span class="lbl">SCORE</span><span class="val" id="score">0</span></div>
+    <div class="stat center"><span class="lvl">关卡 <b id="level">1</b></span></div>
+    <div class="stat right"><span class="lbl">HIGH</span><span class="val" id="high">0</span></div>
+  </div>
+  <div class="row2">
+    <div id="lives"></div>
+    <div id="buffs"></div>
+  </div>
+</div>
+
+<div id="combo"></div>
+<div id="footer"><b>手指滑动 / 鼠标移动</b> 控制挡板 &nbsp;·&nbsp; <b>点击 / 空格</b> 发射 &nbsp;·&nbsp; <b>P</b> 暂停 &nbsp;·&nbsp; <b>R</b> 重开 &nbsp;·&nbsp; <b>M</b> 静音 &nbsp;·&nbsp; <b>F</b> 全屏</div>
+
+<div id="overlay">
+  <div class="card">
+    <h1 id="ovTitle">3D 打砖块</h1>
+    <p id="ovSub">移动挡板接住球，把深处的砖墙全部打碎</p>
+    <div id="ovBody"></div>
+    <button id="ovBtn">开始游戏</button>
+    <div class="keys" id="ovKeys">
+      <span><kbd>手指滑动 / 鼠标</kbd> 控制挡板</span>
+      <span><kbd>空格 / 点击</kbd> 发射球</span>
+      <span><kbd>P</kbd> 暂停</span>
+      <span><kbd>M</kbd> 静音</span>
+      <span><kbd>F</kbd> 全屏</span>
+      <span><kbd>R</kbd> 重开</span>
+    </div>
+  </div>
+</div>
+
+<div id="iconBar">
+  <button id="btnRestart" title="重开 (R)" aria-label="重开">↻</button>
+  <button id="btnPause" title="暂停 (P)" aria-label="暂停">⏸</button>
+  <button id="btnMute" title="静音 (M)" aria-label="静音">🔊</button>
+  <button id="btnFull" title="全屏 (F)" aria-label="全屏">⛶</button>
+</div>
+
+<script>/*__THREE_JS__*/</script>
+<script>/*__GAME_JS__*/</script>
+</body>
+</html>
