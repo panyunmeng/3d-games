@@ -3,11 +3,13 @@ version               = 1.0.0
 display_name          = 3D 游戏合集
 desc                  = 七个纯前端 Three.js 小游戏：贪吃蛇、俄罗斯方块、打砖块、扫雷、推箱子、塔防、坦克大战（含双人联机）。全部程序化生成，零外部资源。<br>可经端口直接访问，也可经 fnOS 统一网关从 <code>/app/3d-games</code> 进入，两种方式同一套服务。
 platform              = x86
+# 运行时装在应用中心，不属于本包；不声明的话干净设备上装完起不来
+install_dep_apps      = nodejs_v24
 source                = thirdparty
 maintainer            = 潘云孟
-maintainer_url        = http://panyunmeng.cn:3000/panyunmeng
+maintainer_url        = https://github.com/panyunmeng/3d-games
 distributor           = 潘云孟
-distributor_url       = http://panyunmeng.cn:3000/panyunmeng
+distributor_url        = https://github.com/panyunmeng/3d-games
 os_min_version        = 1.2.0
 desktop_uidir         = ui
 desktop_applaunchname = 3d-games.main

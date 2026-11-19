@@ -239,3 +239,26 @@ verify-live.mjs（本地 8099）                             门户 7 卡片 7 �
 - `.agents/work/` 被 gitignore，所以 `mobile-check.mjs` 等验收工具**不在仓库里**。
   clone 后想复跑移动端验收，得去 Gitea 旧仓库或本机工作副本取。
 - 只在 Windows + 加速器环境下验证过推送，没验证在无加速器环境下的 pull/push。
+
+## 2026-11-19 09:40 — 补齐 fnOS 上架硬缺口（与经典游戏合集同步）
+
+对照 developer.fnnas.com 的运行时文档，`fnapp/manifest` 缺 `install_dep_apps`：
+`cmd/main` 用 `/var/apps/nodejs_v24/target/bin/node` 却没有声明依赖，
+干净设备（未装 nodejs_v24）装上后应用起不来——而官方审核正是按「干净设备
+首次安装」验的。同批把 `maintainer_url`/`distributor_url` 从内网 Gitea 换成
+GitHub 公网地址（`https://github.com/panyunmeng/3d-games`）。
+
+**注意 `deploy.mjs --install` 对 3D 合集并不生效**：它只产出 fpk 然后打印
+「下一步（手工安装）」就退出了，并没有调 appcenter 装。实测正确路子是
+appcenter-cli 直接来：
+
+```bash
+echo "$PW" | sudo -S appcenter-cli uninstall 3d-games
+cd /home/panyunmeng/3dgames-build/build/3d-games
+sudo appcenter-cli install-fpk 3d-games.fpk -e /tmp/inst.env -v 1
+```
+
+`/tmp/inst.env` 三行：`wizard_port=8081` / `wizard_enable_port=true` /
+`wizard_lan_only=false`。装完回读 `/var/apps/3d-games/manifest` 确认
+`install_dep_apps = nodejs_v24` 与 GitHub URL 都在（fnpack 保留字段），
+:8081 根与 games/{snake,td,tank} 全部 200。
