@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.DS_Store
+Thumbs.db
+.vite/
+*.log
+.agents/work/
+.commit-msg.tmp
