@@ -168,3 +168,74 @@
 用户问的是可行性，尚未决定要上架。若要做，最小工作集是：
 补 `install_dep_apps`、换公网可达的联系地址、补 LICENSE、整理截图与版本说明，
 然后在 fnOS 上按「干净设备 + 首次安装」重测一遍。
+
+## 2026-11-19 09:30 — 结构变更：8 个独立仓库合并为单仓库，并推 GitHub
+
+### 用户裁决
+
+1. GitHub 上**公开**。
+2. 不再建 8 个仓库，「游戏聚合成一个仓库」。
+3. 本地 Gitea 也合并成一个仓库。
+4. 旧的 8 个 Gitea 仓库**归档为只读**。
+5. 新仓库名 `3d-games`（Gitea 与 GitHub 同名）。
+
+### 结果
+
+| 项 | 值 |
+| --- | --- |
+| 本地 | `3D游戏合集/` 根目录现在是 git 仓库（原本刻意无 `.git`） |
+| 提交数 | 69（原 8 仓库）→ **79**（8 次 subtree merge + init + 收尾） |
+| `origin` | `http://panyunmeng.cn:3000/panyunmeng/3d-games.git`（私有） |
+| `github` | `https://github.com/panyunmeng/3d-games`（公开） |
+| 三方一致 | 本地 HEAD = origin/main = github/main = `f98c894` |
+| 旧 8 仓库 | Gitea 上 `archived=true`（只读，完整历史保留，可随时 clone 回退） |
+
+### 合并做法（为什么这样）
+
+用 `git subtree add` 逐目录并入，**历史完整保留**。没用「复制文件 + 单次提交」是因为
+那会丢掉 69 个提交里的演进信息。
+
+关键约束：**目录结构一个都没改**。因为平台的 `scripts/build.mjs` 用 `GAMES_ROOT`
+取「平台根的上一级」来定位 7 个游戏，一旦改成 `games/xxx` 嵌套，构建脚本与各游戏
+的相对路径引用都要跟着改，收益只是目录看着整齐。
+
+### 验证（合并后重跑，证明没破坏可运行性）
+
+```
+npm install（平台+坦克）/ pnpm install（推箱子+塔防）   全部成功
+坦克 npm run build / 推箱子 pnpm build / 塔防 pnpm build  全部通过
+平台 node scripts/build.mjs                             7/7 个游戏，合计 6207 KB
+verify-live.mjs（本地 8099）                             门户 7 卡片 7 封面、7 个游戏全 PASS、零报错
+```
+
+各目录文件数与合并前逐一比对：**8/8 完全一致**；抽查 4 个仓库做树级 diff：**无差异**。
+
+### 顺带做的收尾
+
+- 根 `AGENTS.md` 重写（单仓库 + 双远端 + 归档说明）
+- `.agents/constraints/navigation.md`：原「不在根目录建 git」约束反转，
+  **原文保留**并写明当时为什么那样定、现在为什么改（避免以后有人翻到旧结论又改回去）
+- `.agents/constraints/git-remotes.md` 新增：本机推 GitHub 的两个坑与绕过办法
+- `.agents/context/layout.md`：8 仓库表改成「合并前仓库名（已归档）」
+- 平台 `AGENTS.md` / `README.md`：位置与归属段改为单仓库口径
+- 根 `README.md` 新增（公开仓库门面）：项目总览、玩法矩阵、技术栈、跑法、
+  第三方署名（Three.js MIT / Microban）、许可说明
+- `docs/screenshots/` 新增 14 张展示图（1280 长边 JPEG q82，共 700K）
+- 内网 IP `192.168.1.100` → `192.168.x.x`（3 个文件，公开前脱敏）
+- 删除 `.merge-backup`（478MB）
+
+### 两个新踩的坑（已写进 git-remotes.md）
+
+1. **`~/.gitconfig` 的 insteadOf 会把 GitHub 改写到 gh-proxy，而那条 token 已失效**。
+   报错里的 URL 是 `gh-proxy.com/...` 就说明被改写了，不是 token 本身坏。
+   绕过：URL 写成 `https://panyunmeng@github.com/...`（前缀不匹配，不改写）。
+2. **加速器（Steam++）阻断 CRL 查询**，schannel 报 `CRYPT_E_NO_REVOCATION_CHECK`。
+   这不是证书不受信任，是查不到吊销列表。`http."https://github.com/".schannelCheckRevoke false` 即可。
+
+### 已知不足
+
+- GitHub 仓库**没有 LICENSE**（README 里写的是「暂未授予开源许可，All rights reserved」）。
+  要真正开源需要用户点头选许可证，这是法律声明，不能替他定。
+- `.agents/work/` 被 gitignore，所以 `mobile-check.mjs` 等验收工具**不在仓库里**。
+  clone 后想复跑移动端验收，得去 Gitea 旧仓库或本机工作副本取。
+- 只在 Windows + 加速器环境下验证过推送，没验证在无加速器环境下的 pull/push。
