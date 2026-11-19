@@ -92,7 +92,7 @@ node scripts/gen-levels.py   # 重新生成 10 关地图 JSON（改游戏内容�
 
 ## 部署
 
-**已部署在 NAS 上**：http://panyunmeng.cn:8080/ （局域网 http://192.168.1.100:8080/ ，双人联机可用）
+**已部署在 NAS 上**：http://panyunmeng.cn:8080/ （局域网 http://192.168.x.x:8080/ ，双人联机可用）
 
 本地或自己的机器上部署见 [docs/部署-FNOS.md](docs/部署-FNOS.md)：Docker 一条命令起服务，或用 Node 直接跑。
 

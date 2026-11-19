@@ -10,7 +10,7 @@
 | 应用名 | `3d-games`，显示名「3D 游戏合集」 |
 | 版本 | 1.0.0 |
 | 安装位置 | `/vol1/@appcenter/3d-games`（`target` 指向它） |
-| 端口访问 | `http://panyunmeng.cn:8081/`（局域网 `http://192.168.1.100:8081/`） |
+| 端口访问 | `http://panyunmeng.cn:8081/`（局域网 `http://192.168.x.x:8081/`） |
 | 网关访问 | `https://panyunmeng.cn:5667/app/3d-games`（需登录 fnOS） |
 | 日志 | `/var/apps/3d-games/var/app.log` |
 | 进程 | 由 `cmd/main` 管理，PID 在 `var/app.pid` |

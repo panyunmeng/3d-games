@@ -75,7 +75,7 @@ NAS 上线后：
 ### 当前状态
 
 - 应用已装：`/vol1/@appcenter/3d-games`，版本 1.0.0，状态 running
-- 端口：`http://panyunmeng.cn:8081/`（局域网 `192.168.1.100:8081`）
+- 端口：`http://panyunmeng.cn:8081/`（局域网 `192.168.x.x:8081`）
 - 网关：`https://panyunmeng.cn:5667/app/3d-games`（需登录 fnOS）
 - 8 个 Python venv / node_modules 的旧断链已修（各游戏目录被移进合集后，
   pnpm symlink 里还是旧父路径，全部 `ERR_MODULE_NOT_FOUND`）
