@@ -1,0 +1,12 @@
+{
+  "name": "mine-sweep-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "3D 扫雷 · 经典规则 + 立体矿洞渲染（Three.js，纯前端，零构建）",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "check": "node --check src/main.js && node --test \"tests/*.test.mjs\""
+  }
+}

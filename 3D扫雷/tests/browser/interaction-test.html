@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>3D 扫雷 · 交互集成测试</title>
+<!--
+  浏览器端回归测试：先 node scripts/serve.mjs，再打开
+    http://127.0.0.1:5502/tests/browser/interaction-test.html
+  页面用同源 iframe 跑真实游戏，向画布派发 PointerEvent/MouseEvent，
+  读 HUD 文本断言。标题显示 PASS n/n 即全绿；日志同时输出到 console 与页面底部。
+  注意：后台标签页里 setTimeout 会被节流，整轮可能跑 30 秒以上，属正常。
+-->
+<style>
+  body { margin: 0; font: 13px/1.6 Consolas, monospace; background: #111; color: #ddd; }
+  #game { width: 1280px; height: 800px; border: 0; display: block; }
+  #log { padding: 12px 16px; white-space: pre-wrap; }
+  .pass { color: #6fe08a; }
+  .fail { color: #ff6b6b; }
+  .info { color: #9ab; }
+</style>
+</head>
+<body>
+<!-- 同源 iframe 里跑真实的游戏页面，测试页只负责派发 PointerEvent 并读 HUD 文本 -->
+<iframe id="game" src="/index.html?seed=k7m2xq&level=easy" width="1280" height="800"></iframe>
+<pre id="log"></pre>
+
+<script type="module">
+const frame = document.getElementById('game');
+const logEl = document.getElementById('log');
+const results = [];
+
+function log(text, cls = 'info') {
+  const line = document.createElement('span');
+  line.className = cls;
+  line.textContent = text + '\n';
+  logEl.appendChild(line);
+  console.log(`[test] ${text}`);
+}
+
+function check(name, actual, expected) {
+  const ok = String(actual) === String(expected);
+  results.push({ name, ok, actual, expected });
+  log(`${ok ? 'PASS' : 'FAIL'} ${name}：实际=${actual} 期望=${expected}`, ok ? 'pass' : 'fail');
+  return ok;
+}
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function canvasOf() {
+  return frame.contentDocument.getElementById('stage');
+}
+
+/** 派发一个指针事件；坐标按 iframe 内视口计算（canvas 铺满 iframe）。 */
+function pointer(type, x, y, button = 0, pointerId = 1) {
+  const win = frame.contentWindow;
+  const ev = new win.PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button,
+    buttons: button === 2 ? 2 : 1,
+    pointerId,
+    pointerType: 'mouse',
+    isPrimary: true,
+  });
+  canvasOf().dispatchEvent(ev);
+}
+
+async function click(x, y, button = 0) {
+  pointer('pointerdown', x, y, button);
+  await wait(60);
+  if (button === 0) pointer('pointerup', x, y, button);
+  await wait(160);
+}
+
+/** 右键：真实浏览器里 contextmenu 会跟着来，这里也派发一次。 */
+async function rightClick(x, y) {
+  pointer('pointerdown', x, y, 2);
+  const win = frame.contentWindow;
+  canvasOf().dispatchEvent(new win.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
+  await wait(220);
+}
+
+function hud(id) {
+  const node = frame.contentDocument.getElementById(id);
+  return node ? node.textContent.trim() : '(missing)';
+}
+
+function progress() {
+  return parseInt(hud('progress-text'), 10);
+}
+
+function flagCount() {
+  return parseInt(hud('mine-count'), 10);
+}
+
+function isHidden(id) {
+  const node = frame.contentDocument.getElementById(id);
+  return !!node && node.classList.contains('hidden');
+}
+
+/** 同步连发两次点击：时间戳间隔 ~0ms，必定落在 350ms 双击窗口内。 */
+async function doubleClick(x, y) {
+  pointer('pointerdown', x, y, 0);
+  pointer('pointerup', x, y, 0);
+  pointer('pointerdown', x, y, 0);
+  pointer('pointerup', x, y, 0);
+  await wait(300);
+}
+
+/** 派发触屏指针事件（pointerType=touch，button 恒为 0），用于触屏手势回归。 */
+function touch(type, x, y, pointerId = 11) {
+  const win = frame.contentWindow;
+  const ev = new win.PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+    pointerId,
+    pointerType: 'touch',
+    isPrimary: pointerId === 11,
+  });
+  canvasOf().dispatchEvent(ev);
+}
+
+/**
+ * 模拟一次触屏长按：down → 等 > LONG_PRESS_MS(400) → up。
+ * 等 460ms 保证越过 400ms 阈值，再等 200ms 看抬起后有没有误挖。
+ */
+async function longPress(x, y, pointerId = 11) {
+  touch('pointerdown', x, y, pointerId);
+  // 等 > 400ms 阈值；用 1100ms 兼容后台标签页把 setTimeout 节流到 ~1s 的情况
+  await wait(1100);
+  touch('pointerup', x, y, pointerId);
+  await wait(220);
+}
+
+/** 双指轻点同一格：两指 down→up，间距/位移都极小，应走和弦语义。 */
+async function twoFingerTap(x, y) {
+  touch('pointerdown', x, y, 11);
+  touch('pointerdown', x, y, 12);
+  await wait(60);
+  touch('pointerup', x, y, 12);
+  touch('pointerup', x, y, 11);
+  await wait(220);
+}
+
+/** 双指捏合张开：间距变化远超 12px，应缩放而不是挖开/旋转。 */
+async function pinchApart(cx, cy) {
+  touch('pointerdown', cx - 40, cy, 11);
+  touch('pointerdown', cx + 40, cy, 12);
+  for (let i = 1; i <= 5; i++) {
+    touch('pointermove', cx - 40 - i * 10, cy, 11);
+    touch('pointermove', cx + 40 + i * 10, cy, 12);
+    await wait(20);
+  }
+  touch('pointerup', cx - 90, cy, 11);
+  touch('pointerup', cx + 90, cy, 12);
+  await wait(220);
+}
+
+async function drag(fromX, fromY, toX, toY) {
+  pointer('pointerdown', fromX, fromY, 0);
+  const steps = 6;
+  for (let i = 1; i <= steps; i++) {
+    pointer('pointermove', fromX + ((toX - fromX) * i) / steps, fromY + ((toY - fromY) * i) / steps, 0);
+    await wait(20);
+  }
+  pointer('pointerup', toX, toY, 0);
+  await wait(220);
+}
+
+async function run() {
+  await wait(1400);
+  const doc = frame.contentDocument;
+  if (!doc || !doc.getElementById('stage')) {
+    log('FAIL 游戏页面未加载', 'fail');
+    return;
+  }
+
+  // 等首帧渲染完（相机矩阵要靠帧更新，否则射线拾取没有方向）
+  await wait(900);
+
+  check('开局完成度', hud('progress-text'), '0%');
+  check('开局剩余雷数', flagCount(), 10);
+
+  // 1) 右键插旗
+  await rightClick(640, 430);
+  check('右键插旗后剩余雷数', flagCount(), 9);
+
+  // 2) 对已插旗格左键无效
+  const before = progress();
+  await click(640, 430, 0);
+  check('插旗格左键不挖开', progress(), before);
+
+  // 3) 右键撤旗
+  await rightClick(640, 430);
+  check('撤旗后剩余雷数', flagCount(), 10);
+
+  // 4) 左键挖开
+  await click(640, 430, 0);
+  const afterReveal = progress();
+  check('左键能挖开（完成度 > 0）', afterReveal > 0, true);
+
+  // 5) 双击 / 中键和弦：该格已挖开，中心是 0 格，和弦应为无害空操作（盘面不变）
+  await doubleClick(640, 430);
+  check('双击已挖开格不改变完成度', progress(), afterReveal);
+  pointer('pointerdown', 640, 430, 1);
+  pointer('pointerup', 640, 430, 1);
+  await wait(300);
+  check('中键不抛异常且不改变完成度', progress(), afterReveal);
+
+  // 6) 拖拽只旋转、不误挖
+  const beforeDrag = progress();
+  await drag(700, 500, 780, 470);
+  check('拖拽不触发挖开', progress(), beforeDrag);
+
+  // 6) 提示：完成度上升并出现练习局标记
+  const beforeHint = progress();
+  doc.getElementById('btn-hint').click();
+  await wait(400);
+  check('提示后完成度上升', progress() > beforeHint, true);
+  check('提示后出现练习局标记', isHidden('chip-assisted'), false);
+
+  // 7) 撤销：回到提示之前
+  doc.getElementById('btn-undo').click();
+  await wait(400);
+  check('撤销回到提示前', progress(), beforeHint);
+
+  // 8) 重开：归零
+  doc.getElementById('btn-restart').click();
+  await wait(700);
+  check('重开后完成度', hud('progress-text'), '0%');
+  check('重开后剩余雷数', flagCount(), 10);
+  check('重开后练习局标记隐藏', isHidden('chip-assisted'), true);
+
+  // ── 触屏专项（移动端适配）──────────────────────────────
+  // 此时刚重开：全盘未挖，剩余雷数 10，完成度 0%。
+  // 9) 长按插旗生效：触屏 down 保持 >400ms 再 up，应插旗（剩余雷数 10→9）
+  await longPress(640, 430);
+  check('长按插旗后剩余雷数', flagCount(), 9);
+  // 10) 长按抬起绝不误挖：完成度必须仍是 0%
+  check('长按抬起不误挖（完成度仍为 0）', progress(), 0);
+  // 11) 再次长按撤旗：剩余雷数回到 10
+  await longPress(640, 430);
+  check('再次长按撤旗后剩余雷数', flagCount(), 10);
+  // 12) 双指捏合不抛异常且不误挖（缩放走 stage.zoomBy，不触发 reveal）
+  const beforePinch = progress();
+  await pinchApart(640, 430);
+  check('双指捏合不挖开', progress(), beforePinch);
+  // 13) 触屏轻点能挖开（为双指轻点和弦准备一个已挖开的 0 格）
+  touch('pointerdown', 640, 430, 11);
+  touch('pointerup', 640, 430, 11);
+  await wait(220);
+  const afterTouchReveal = progress();
+  check('触屏轻点能挖开', afterTouchReveal > 0, true);
+  // 14) 双指轻点已挖开的 0 格：和弦空操作，不改变完成度、不报错
+  await twoFingerTap(640, 430);
+  check('双指轻点已挖开格不改变完成度', progress(), afterTouchReveal);
+
+  // 10) 滚轮不抛异常
+  let wheelOk = true;
+  try {
+    const win = frame.contentWindow;
+    canvasOf().dispatchEvent(new win.WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -240 }));
+    await wait(200);
+  } catch (err) {
+    wheelOk = false;
+  }
+  check('滚轮缩放不抛异常', wheelOk, true);
+
+  // 11) 回菜单
+  doc.getElementById('btn-menu').click();
+  await wait(500);
+  check('回菜单后菜单可见', isHidden('menu'), false);
+  check('回菜单后 HUD 隐藏', isHidden('hud'), true);
+
+  const failed = results.filter((r) => !r.ok);
+  log('');
+  log(`总计 ${results.length} 项，失败 ${failed.length} 项`, failed.length ? 'fail' : 'pass');
+  document.title = failed.length ? `FAIL ${failed.length}/${results.length}` : `PASS ${results.length}/${results.length}`;
+}
+
+run().catch((err) => {
+  log('测试脚本异常：' + (err && err.stack ? err.stack : err), 'fail');
+  document.title = 'ERROR';
+});
+</script>
+</body>
+</html>
