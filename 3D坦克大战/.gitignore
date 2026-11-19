@@ -1,0 +1,12 @@
+node_modules/
+dist/
+dist-server/
+.tmp/
+*.log
+.DS_Store
+.agents/work/
+
+# 本项目用 npm（Dockerfile 是 npm ci + package-lock.json）。
+# pnpm-lock.yaml 是本地用 pnpm 装依赖时的副产物，不是权威锁，不入库——
+# 两份 lock 并存会让「装的到底是哪套依赖」说不清。
+pnpm-lock.yaml

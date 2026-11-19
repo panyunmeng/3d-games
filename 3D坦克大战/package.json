@@ -1,0 +1,36 @@
+{
+  "name": "tank-3d",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "3D 坦克大战 · 经典 Battle City 规则的 3D 重制（Three.js + TypeScript）",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "vite",
+    "dev:server": "node --experimental-strip-types server/index.ts",
+    "build": "node scripts/build.mjs",
+    "build:client": "vite build",
+    "build:server": "node scripts/build-server.mjs",
+    "start": "node dist-server/index.mjs",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "net:smoke": "node scripts/net-smoke.mjs",
+    "net:bot": "node scripts/net-bot.mjs",
+    "levels": "python scripts/gen-levels.py"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/three": "^0.180.0",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.24.0",
+    "three": "^0.180.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}
