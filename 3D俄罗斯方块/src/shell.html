@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>3D 俄罗斯方块</title>
+<style>
+  :root{
+    --pink:#ff7a94;
+    --cyan:#5fe7ff;
+    --mint:#7ef2a8;
+    --yellow:#ffe066;
+    --purple:#c98bff;
+    --orange:#ffb15e;
+    --blue:#7aa8ff;
+    --ink:#f4f0ff;
+    --dim:#a99ecb;
+    --card:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.035));
+    --line:rgba(255,255,255,.16);
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;height:100%;overflow:hidden;
+    background:radial-gradient(120% 90% at 50% -10%, #2a1d5c 0%, #170f3a 42%, #0a0d16 100%);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    touch-action:none;user-select:none;-webkit-user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  body::before{
+    content:"";position:fixed;inset:-20%;pointer-events:none;z-index:0;
+    background:
+      radial-gradient(38% 32% at 18% 12%,rgba(201,139,255,.22),transparent 70%),
+      radial-gradient(34% 30% at 84% 18%,rgba(95,231,255,.16),transparent 70%),
+      radial-gradient(42% 36% at 50% 100%,rgba(255,122,148,.14),transparent 72%);
+    filter:blur(6px);
+  }
+  /* canvas 必须显式 touch-action:none：body 上的声明不会覆盖它自己的 computed style。
+     滑动会被页面吞掉的根因就在这里（实测 baseline 是 auto）。 */
+  #cv{position:fixed;inset:0;display:block;width:100%;height:100%;z-index:1;touch-action:none;}
+
+  /* ---------------- HUD ---------------- */
+  #hud{position:fixed;inset:0;z-index:2;pointer-events:none;
+    padding:calc(14px + env(safe-area-inset-top)) 18px calc(12px + env(safe-area-inset-bottom));
+    display:flex;flex-direction:column;justify-content:space-between;}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;}
+  .top-left{display:flex;align-items:flex-start;gap:8px;}
+
+  .panel{
+    background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:12px 16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    box-shadow:0 12px 34px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.22);
+  }
+  .lbl{font-size:11px;letter-spacing:.22em;color:var(--dim);font-weight:700;}
+
+  .score-panel{min-width:186px;}
+  .score-val{
+    font-size:clamp(28px,4.4vw,42px);font-weight:900;line-height:1.05;
+    font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+    background:linear-gradient(100deg,var(--yellow),var(--orange) 45%,var(--pink));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 2px 10px rgba(255,177,94,.35));
+  }
+  .score-sub{display:flex;gap:14px;margin-top:6px;font-size:12px;color:var(--dim);font-weight:600;}
+  .score-sub b{color:var(--ink);font-variant-numeric:tabular-nums;font-size:13px;}
+
+  .side{display:flex;flex-direction:column;gap:10px;align-items:stretch;}
+  .mini{padding:10px 12px;}
+  .mini .lbl{margin-bottom:6px;}
+  #nextCv{display:block;width:118px;height:186px;}
+  #holdCv{display:block;width:92px;height:66px;}
+
+  .hint{
+    align-self:center;font-size:12px;color:var(--dim);letter-spacing:.02em;
+    background:rgba(10,6,24,.55);border:1px solid rgba(255,255,255,.09);
+    border-radius:999px;padding:7px 16px;backdrop-filter:blur(8px);
+    text-align:center;line-height:1.5;
+  }
+  .hint b{color:#e9e2ff;font-weight:700;}
+
+  /* ---------------- 触屏控制 ----------------
+     方块游戏对精度敏感：旋转/硬降必须是明确按钮，不能只靠手势。
+     移动做成「按钮 + DAS 连发」而不是横滑：横滑和相机拖动抢同一根手指，
+     而且滑动距离到格数没有一一对应关系，容易一格变三格。 */
+  #controls{
+    pointer-events:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+    /* 右下角让给平台注入的「返回平台」按钮：
+       实测按钮 97px 宽 + 平台 right:12px = 占右侧 109px，再留 9px 余量 = 118px。
+       64px 的旧预留不够，暂停键被压掉近一半（27×44 相交）。 */
+    margin-right:118px;
+  }
+  .tbtn{
+    pointer-events:auto;touch-action:none;cursor:pointer;
+    min-width:0;width:100%;height:54px;
+    display:flex;align-items:center;justify-content:center;
+    border:1px solid rgba(255,255,255,.20);border-radius:14px;
+    background:linear-gradient(180deg,rgba(255,255,255,.15),rgba(255,255,255,.05));
+    color:var(--ink);font:800 18px/1 inherit;font-family:inherit;letter-spacing:.02em;
+    backdrop-filter:blur(8px);box-shadow:0 6px 18px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.2);
+    transition:transform .08s ease,background .08s ease;
+  }
+  .tbtn:active,.tbtn.down{transform:scale(.95);background:rgba(95,231,255,.24);}
+  .tbtn.primary{
+    background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
+    color:#1b1030;border-color:rgba(255,255,255,.35);font-size:15px;
+  }
+  .tbtn.wide-label{font-size:12px;letter-spacing:.06em;}
+
+  /* 居中提示（连击 / T-SPIN / TETRIS） */
+  #toast{
+    position:fixed;left:50%;top:26%;transform:translate(-50%,-50%) scale(.9);
+    z-index:3;pointer-events:none;opacity:0;transition:opacity .16s ease,transform .16s ease;
+    font-size:clamp(22px,3.6vw,34px);font-weight:900;letter-spacing:.04em;
+    text-shadow:0 0 22px currentColor,0 6px 18px rgba(0,0,0,.5);
+    white-space:nowrap;
+  }
+  #toast.on{opacity:1;transform:translate(-50%,-50%) scale(1);}
+
+  /* ---------------- 覆盖层 ---------------- */
+  #overlay{
+    position:fixed;inset:0;z-index:5;display:none;place-items:center;
+    background:rgba(6,3,16,.52);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    padding:20px;
+  }
+  #overlay.on{display:grid;}
+  .dialog{
+    width:min(520px,94vw);text-align:center;max-height:88dvh;overflow:auto;
+    -webkit-overflow-scrolling:touch;
+    background:linear-gradient(180deg,rgba(46,32,96,.92),rgba(20,13,48,.94));
+    border:1px solid rgba(255,255,255,.18);border-radius:28px;padding:30px 28px 26px;
+    box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .dialog h1{
+    margin:0 0 6px;font-size:clamp(26px,4.6vw,38px);font-weight:900;letter-spacing:.02em;
+    background:linear-gradient(100deg,var(--cyan),var(--purple) 48%,var(--pink));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .dialog p{margin:0 0 18px;color:var(--dim);font-size:14px;line-height:1.65;}
+  .dialog .big{font-size:40px;font-weight:900;color:var(--yellow);font-variant-numeric:tabular-nums;margin:4px 0 2px;}
+  .dialog .keys{
+    margin:16px 0 20px;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;
+    font-size:12.5px;color:var(--dim);text-align:left;
+  }
+  .dialog .keys span{display:flex;justify-content:space-between;gap:10px;
+    border-bottom:1px dashed rgba(255,255,255,.1);padding-bottom:5px;}
+  .dialog .keys b{color:#efe9ff;font-weight:700;}
+  .btn{
+    pointer-events:auto;cursor:pointer;border:0;border-radius:12px;
+    min-height:48px;padding:14px 34px;font-size:17px;font-weight:900;letter-spacing:.06em;color:#1b1030;
+    background:linear-gradient(100deg,var(--yellow),var(--orange) 55%,var(--pink));
+    box-shadow:0 10px 26px rgba(255,150,110,.35),inset 0 1px 0 rgba(255,255,255,.6);
+    transition:transform .12s ease,box-shadow .12s ease;
+    font-family:inherit;
+  }
+  .btn:hover{transform:translateY(-2px);box-shadow:0 16px 32px rgba(255,150,110,.42),inset 0 1px 0 rgba(255,255,255,.6);}
+  .btn:active{transform:translateY(1px) scale(.99);}
+  .btn.ghost{
+    background:rgba(255,255,255,.08);color:#efe9ff;box-shadow:none;
+    border:1px solid rgba(255,255,255,.2);margin-left:10px;
+  }
+
+  /* 音效按钮在触屏下是 HUD 的一个普通 44px 按钮，不占右下角 */
+  #soundBtn{
+    pointer-events:auto;cursor:pointer;flex:0 0 44px;
+    width:44px;height:44px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);font-size:17px;line-height:1;
+    backdrop-filter:blur(10px);box-shadow:0 8px 22px rgba(0,0,0,.3);
+    font-family:inherit;
+  }
+  #soundBtn.off{opacity:.45;}
+
+  /* ---------------- 竖屏（375×812 主档） ---------------- */
+  @media (max-width:640px) and (orientation:portrait){
+    #hud{padding:calc(10px + env(safe-area-inset-top)) 18px calc(10px + env(safe-area-inset-bottom));}
+    .top{gap:8px;}
+    .score-panel{min-width:118px;padding:8px 9px;}
+    .score-val{font-size:24px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .score-sub b{font-size:12px;}
+    .mini{padding:7px 9px;}
+    .mini .lbl{font-size:10px;margin-bottom:4px;}
+    .side{flex-direction:row;gap:6px;}
+    #nextCv{width:64px;height:96px;}
+    #holdCv{width:52px;height:38px;}
+    .lbl{font-size:10px;letter-spacing:.12em;}
+    .hint{display:none;}
+    #controls{position:fixed;left:18px;right:118px;bottom:calc(10px + env(safe-area-inset-bottom));margin-right:0;}
+    .tbtn{height:54px;font-size:19px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+  }
+
+  /* ---------------- 横屏（844×390）：面板收到两侧，控制一行 ---------------- */
+  @media (orientation:landscape) and (max-height:560px){
+    #hud{padding:calc(8px + env(safe-area-inset-top)) 14px calc(8px + env(safe-area-inset-bottom));}
+    .hint{display:none;}
+    .top{display:block;}
+    .top-left{display:contents;}
+    .score-panel{position:fixed;left:14px;top:50%;transform:translateY(-50%);
+      min-width:132px;padding:8px 10px;}
+    .score-val{font-size:26px;}
+    .score-sub{gap:8px;font-size:11px;}
+    .side{position:fixed;right:14px;top:50%;transform:translateY(-50%);
+      flex-direction:column;gap:8px;}
+    .mini{padding:6px 8px;}
+    .mini .lbl{font-size:9px;margin-bottom:3px;letter-spacing:.1em;}
+    #nextCv{width:64px;height:100px;}
+    #holdCv{width:56px;height:40px;}
+    #soundBtn{position:fixed;left:14px;bottom:calc(8px + env(safe-area-inset-bottom));}
+    #controls{position:fixed;left:180px;right:118px;bottom:calc(8px + env(safe-area-inset-bottom));
+      margin-right:0;grid-template-columns:repeat(8,1fr);}
+    .tbtn{height:48px;font-size:17px;}
+    .tbtn.wide-label{font-size:11px;}
+    .tbtn.primary{font-size:13px;}
+    .dialog{padding:18px 22px;}
+    .dialog .keys{margin:10px 0 14px;}
+  }
+
+  /* 桌面：恢复原来的固定音效按钮位置，键盘提示照旧 */
+  @media (min-width:641px) and (min-height:561px){
+    /* 平台返回按钮锚在右下（right:12, 97×44），音效开关移到左下避免相交 */
+    #soundBtn{position:fixed;left:16px;bottom:calc(14px + env(safe-area-inset-bottom));}
+    #controls{display:none;}
+  }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud">
+  <div class="top">
+    <div class="top-left">
+      <div class="panel score-panel">
+        <div class="lbl">分 数</div>
+        <div class="score-val" id="scoreVal">0</div>
+        <div class="score-sub">
+          <span>等级 <b id="levelVal">1</b></span>
+          <span>消行 <b id="linesVal">0</b></span>
+          <span>最高 <b id="bestVal">0</b></span>
+        </div>
+      </div>
+      <button id="soundBtn" title="音效开关（M）" aria-label="音效开关">🔊</button>
+    </div>
+    <div class="side">
+      <div class="panel mini">
+        <div class="lbl">下一块</div>
+        <canvas id="nextCv" width="118" height="186"></canvas>
+      </div>
+      <div class="panel mini">
+        <div class="lbl">暂存 C</div>
+        <canvas id="holdCv" width="92" height="66"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="hint">
+    <b>← →</b> 移动 · <b>↑ / X</b> 旋转 · <b>Z</b> 逆转 · <b>↓</b> 软降 · <b>空格</b> 硬降 · <b>C</b> 暂存 · <b>P</b> 暂停 · <b>R</b> 重开
+  </div>
+  <div id="controls" aria-label="触屏操作">
+    <button class="tbtn" data-act="left" aria-label="左移">◀</button>
+    <button class="tbtn" data-act="right" aria-label="右移">▶</button>
+    <button class="tbtn" data-act="ccw" aria-label="逆转">⟲</button>
+    <button class="tbtn" data-act="cw" aria-label="旋转">⟳</button>
+    <button class="tbtn" data-act="soft" aria-label="软降">▼</button>
+    <button class="tbtn wide-label" data-act="hold" aria-label="暂存">HOLD</button>
+    <button class="tbtn primary" data-act="hard" aria-label="硬降">硬降</button>
+    <button class="tbtn" data-act="pause" aria-label="暂停">❚❚</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+  <div class="dialog" id="dialog"></div>
+</div>
+
+<script>/*__THREE_JS__*/</script>
+<script>/*__ROUNDED_JS__*/</script>
+<script>/*__FRAMING_JS__*/</script>
+<script>/*__CORE_JS__*/</script>
+<script>/*__GAME_JS__*/</script>
+</body>
+</html>
