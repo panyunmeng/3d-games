@@ -1,0 +1,11 @@
+{
+  "name": "jelly-snake-3d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "2.5D 立体渲染的经典贪吃蛇（Three.js，纯前端，零构建）",
+  "scripts": {
+    "start": "node scripts/serve.mjs",
+    "test": "node --test tests/"
+  }
+}
