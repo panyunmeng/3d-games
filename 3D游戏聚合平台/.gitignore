@@ -1,0 +1,17 @@
+# 构建与打包产物（由脚本现取现建，不入库）
+build/
+
+# 依赖
+node_modules/
+
+# 过程文件与浏览器配置
+# 验收用的无头浏览器 profile（目录名随会话变，用通配）
+.agents/work/cp*/
+.agents/work/chrome-prof/
+.agents/work/*.log
+# 临时截图：验收证据放 visual/，临时的不入库
+.agents/work/*.png
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db

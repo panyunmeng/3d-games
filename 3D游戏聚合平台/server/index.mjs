@@ -1,0 +1,485 @@
+/**
+ * 3D 游戏合集 · 服务进程（零第三方依赖，Node >= 20）
+ *
+ * 为什么是一个进程而不是七个：
+ * 7 个游戏里有 6 个是纯静态文件，只有坦克大战带 WebSocket 权威仿真。
+ * 静态站点用 nginx 也能做，但那样就得在 NAS 上改系统 nginx 配置（fnOS 升级会覆盖），
+ * 而且 WS 还得单独反代一次。一个进程同时会监听端口和网关 Unix Socket，
+ * 两种访问方式共用同一套路由，少一层配置就少一处会坏的地方。
+ *
+ * 为什么自己要剥前缀：
+ * 网关会把请求连同 /app/<appname> 前缀一起转发过来（见 fnOS 统一网关文档），
+ * 而静态资源在产物里是相对路径。所以服务必须知道「此刻挂在哪个前缀下」，
+ * 把前缀剥掉再查文件，并把前缀回写给前端（门户页据此拼游戏链接）。
+ *
+ * 三种监听形态，同一套逻辑：
+ *   1. TCP 端口（wizard_port），直接对外，访问 /            → 前缀为空
+ *   2. 网关 Unix Socket（gatewaySocket），访问 /app/<name>/  → 前缀 /app/<name>
+ *   3. 两者都开（默认），自动按请求路径判断
+ */
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTankServer } from './tank.mjs';
+
+const HERE = fileURLToPath(new URL('.', import.meta.url));
+// 合集根目录：server/ 的上一级。所有相对位置都从它推导，不写死绝对路径。
+const ROOT_DIR = path.resolve(HERE, '..');
+
+/* ── 配置：全部来自环境变量，默认值保证裸跑可用 ─────────────────── */
+
+// 产物根目录。构建放进 build/www；调用方也可以指到别处（部署时指向安装目录）。
+const ROOT = path.resolve(process.env.WEB_ROOT ?? path.join(ROOT_DIR, 'build', 'www'));
+const PORT = Number(process.env.PORT ?? 0);
+const HOST = process.env.HOST ?? '0.0.0.0';
+const SOCKET = process.env.GATEWAY_SOCKET_PATH ?? '';
+const GATEWAY_PREFIX = normalizePrefix(process.env.GATEWAY_PREFIX ?? '');
+/** 联机游戏挂在哪个子路径下。坦克的 WS 只在这个前缀下接受连接。 */
+const NET_GAME_PATH = '/games/tank/';
+
+function normalizePrefix(p) {
+  if (!p) return '';
+  let s = p.trim();
+  if (!s.startsWith('/')) s = '/' + s;
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  return s;
+}
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.txt': 'text/plain; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+};
+
+/**
+ * 把一个请求路径拆成「挂载前缀」和「站内路径」。
+ *
+ * 判据是路径本身而不是监听器：同一个进程可能同时被端口和网关访问，
+ * 网关来的请求一定以 GATEWAY_PREFIX 开头，端口来的不一定（用户也可能
+ * 手动加上前缀访问，那时同样该能工作）。
+ */
+function splitPath(rawPath) {
+  let pathname = rawPath;
+  if (GATEWAY_PREFIX && (pathname === GATEWAY_PREFIX || pathname.startsWith(GATEWAY_PREFIX + '/'))) {
+    return { prefix: GATEWAY_PREFIX, inner: pathname.slice(GATEWAY_PREFIX.length) || '/' };
+  }
+  return { prefix: '', inner: pathname };
+}
+
+/** 站内路径 → 磁盘路径。拒绝一切逃出 WEB_ROOT 的解析结果。 */
+function resolveAsset(inner) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(inner);
+  } catch {
+    return null; // 非法百分号编码
+  }
+  if (decoded.includes('\0')) return null;
+  let rel = decoded;
+  if (rel.endsWith('/')) rel += 'index.html';
+  const resolved = path.resolve(ROOT, '.' + rel);
+  const rootWithSep = ROOT.endsWith(path.sep) ? ROOT : ROOT + path.sep;
+  if (resolved !== ROOT && !resolved.startsWith(rootWithSep)) return null;
+  return resolved;
+}
+
+async function sendFile(res, file, { immutable = false, inject = null } = {}) {
+  let data = await fs.readFile(file);
+  const ext = path.extname(file).toLowerCase();
+
+  // 注入只对游戏首页的 HTML 生效。改了内容就必须重算长度，
+  // 否则 content-length 与实体不符，浏览器会截断或挂起。
+  if (inject && ext === '.html') {
+    data = Buffer.from(inject(data.toString('utf8')), 'utf8');
+  }
+
+  res.writeHead(200, {
+    'content-type': MIME[ext] ?? 'application/octet-stream',
+    'content-length': data.length,
+    'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+  });
+  res.end(data);
+}
+
+/**
+ * 给游戏页注入一个「返回平台」浮层。
+ *
+ * 为什么放在服务端注入而不是改各游戏源码：7 个游戏是独立仓库，往每个
+ * 游戏里塞一段平台专用的 UI 会污染它们（单机部署时那段按钮毫无意义，
+ * 还得各自维护）。注入发生在响应阶段，游戏文件保持原样，产物也不需要重建。
+ *
+ * 为什么还需要它（门户已经改成新标签页了）：
+ *   1. 有人直接输网址 / 从收藏夹进游戏，绕过了门户
+ *   2. fnOS 里同一 iframe 重开页面时，历史里没有门户
+ *   3. 关掉标签页再回来，不如页内一键返回顺手
+ *
+ * 设计约束：
+ *   - 只注入一次（已有 data-platform-back 就不再加）
+ *   - z-index 取很高，避免被游戏的 HUD 盖住
+ *   - pointer-events 只给按钮本身，不挡游戏画面
+ *   - 与游戏样式完全不共享，用内联 style 和 !important 防止被覆盖
+ */
+function backOverlay(prefix) {
+  const home = `${prefix || ''}/`;
+  return `
+<script data-platform-back>
+(function () {
+  if (window.__PLATFORM_BACK__) return;
+  window.__PLATFORM_BACK__ = 1;
+  var HOME = ${JSON.stringify(home)};
+  function mount() {
+    if (document.querySelector('[data-platform-back-btn]')) return;
+    var a = document.createElement('a');
+    a.setAttribute('data-platform-back-btn', '');
+    a.href = HOME;
+    a.textContent = '\\u2190 \\u8fd4\\u56de\\u5e73\\u53f0';
+    a.setAttribute('aria-label', '\\u8fd4\\u56de 3D \\u6e38\\u620f\\u5e73\\u53f0');
+    /**
+     * 触屏与桌面两套尺寸。
+     *
+     * 为什么不能只写一套：桌面 7px 内边距 + 12px 字 = 约 28px 高，这是刻意的，
+     * 不抢画面；但手机端 28px 远低于 44px 的可点下限，实测按不准。
+     * 用 matchMedia 而不是 CSS 媒体查询，是因为这些样式是内联 + !important，
+     * 内联样式里写不了 @media；判断放在 mount 时做一次即可。
+     *
+     * 触屏额外把默认不透明度提到 .82：桌面有 hover 可以「悬停才显形」，
+     * 触屏没有 hover，.55 会让按钮在手机上看不清、不知道该点哪。
+     */
+    var coarse = false;
+    try {
+      coarse = window.matchMedia('(pointer: coarse)').matches;
+    } catch (e) { /* 老浏览器没有 matchMedia，按桌面处理 */ }
+    a.style.cssText = [
+      'position:fixed !important',
+      'right:calc(12px + env(safe-area-inset-right, 0px)) !important',
+      'bottom:calc(12px + env(safe-area-inset-bottom, 0px)) !important',
+      'z-index:2147483646 !important',
+      'display:inline-flex !important',
+      'align-items:center !important',
+      'justify-content:center !important',
+      'gap:6px !important',
+      coarse ? 'min-height:44px !important' : '',
+      coarse ? 'padding:0 16px !important' : 'padding:7px 13px !important',
+      'border-radius:999px !important',
+      'background:rgba(12,16,26,.82) !important',
+      'color:#e8ecf6 !important',
+      'border:1px solid rgba(255,255,255,.16) !important',
+      'font:600 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif !important',
+      'text-decoration:none !important',
+      'letter-spacing:.02em !important',
+      'backdrop-filter:blur(8px) !important',
+      '-webkit-backdrop-filter:blur(8px) !important',
+      'box-shadow:0 4px 16px -6px rgba(0,0,0,.6) !important',
+      coarse ? 'opacity:.82 !important' : 'opacity:.55 !important',
+      'transition:opacity .18s ease,transform .18s ease !important',
+      'cursor:pointer !important',
+      'pointer-events:auto !important',
+      'user-select:none !important'
+    ].join(';');
+    // 默认半透明，不抢游戏画面；悬停才完全显形。
+    // 触屏没有 hover，所以粗指针设备直接给 .82，避免手机上看不清这个按钮。
+    a.addEventListener('mouseenter', function () {
+      a.style.setProperty('opacity', '1', 'important');
+      a.style.setProperty('transform', 'translateX(-2px)', 'important');
+    });
+    a.addEventListener('mouseleave', function () {
+      a.style.setProperty('opacity', coarse ? '.82' : '.55', 'important');
+      a.style.setProperty('transform', 'none', 'important');
+    });
+    // 触屏没有 hover，按下时短暂显形
+    a.addEventListener('touchstart', function () {
+      a.style.setProperty('opacity', '1', 'important');
+    }, { passive: true });
+    a.addEventListener('touchend', function () {
+      a.style.setProperty('opacity', coarse ? '.82' : '.55', 'important');
+    }, { passive: true });
+
+    // 挂到 body 最后，确保在游戏所有节点之后（同 z-index 时后来者在上）
+    (document.body || document.documentElement).appendChild(a);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();
+</script>
+`;
+}
+
+/**
+ * 给游戏页注入统一设计令牌（CSS 变量）与返回按钮。
+ *
+ * 为什么注入令牌而不改 7 个游戏的 CSS：令牌是「所有游戏共用同一组变量名」，
+ * 注入后游戏里所有 `var(--text)`、`var(--radius)` 立刻取到统一值，
+ * 不用动它们任何一个仓库。游戏自己声明的 `--accent` 会覆盖注入值，
+ * 所以每个游戏的强调色仍然是它自己的——这正是规范要的：
+ * 骨架统一、个性保留。
+ *
+ * 顺序很重要：令牌的 <link> 必须在游戏自己的 <style> <link> **之前**，
+ * 这样游戏原有样式仍在后面、优先权更高，不会被令牌意外盖掉。
+ */
+function withDesign(html, prefix) {
+  let out = html;
+
+  // 1. 令牌进 <head>：必须在游戏自己的样式之前，游戏原有样式仍然优先
+  if (!out.includes('data-platform-design')) {
+    const href = `${prefix || ''}/design-tokens.css`;
+    const linkTag = `<link rel="stylesheet" data-platform-design href="${href}">`;
+    /**
+     * 插在 <head> 之后，而不是 </head> 之前。
+     *
+     * 位置决定优先级：游戏自己的 <link rel=stylesheet> 在 head 里，
+     * 令牌若排在它们后面、且选择器权重相同，就会反过来盖掉游戏的样式。
+     * 放在最前，游戏原有样式仍在后面 → 游戏优先，令牌只提供「游戏没写」
+     * 的那些变量与通用类。这正是规范要的层次：令牌兜底，游戏定调。
+     */
+    const headOpen = out.indexOf('<head');
+    if (headOpen === -1) {
+      out = linkTag + out;
+    } else {
+      const headClose = out.indexOf('>', headOpen);
+      out = out.slice(0, headClose + 1) + linkTag + out.slice(headClose + 1);
+    }
+  }
+
+  // 2. 返回按钮进 </body> 前
+  if (!out.includes('data-platform-back')) {
+    const tag = backOverlay(prefix);
+    const idx = out.lastIndexOf('</body>');
+    out = idx === -1 ? out + tag : out.slice(0, idx) + tag + out.slice(idx);
+  }
+
+  return out;
+}
+
+function sendText(res, code, text) {
+  const body = Buffer.from(text, 'utf8');
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8', 'content-length': body.length });
+  res.end(body);
+}
+
+/* ── 坦克联机服务：同进程内挂载，不额外占端口 ───────────────────── */
+
+const tank = await createTankServer({
+  mount: NET_GAME_PATH,
+  // 坦克的静态文件由本服务的静态分支统一提供，这里只要 WebSocket 与 /healthz
+  serveStatic: false,
+});
+
+/* ── 健康检查 ───────────────────────────────────────────────────── */
+
+function healthPayload() {
+  return JSON.stringify({
+    ok: true,
+    app: '3d-game-collection',
+    prefix: GATEWAY_PREFIX || null,
+    netGame: NET_GAME_PATH,
+    uptime: Math.round(process.uptime()),
+  });
+}
+
+/* ── 主处理 ─────────────────────────────────────────────────────── */
+
+async function handle(req, res) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    sendText(res, 405, 'method not allowed');
+    return;
+  }
+
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const { inner } = splitPath(url.pathname);
+
+  if (inner === '/healthz') {
+    const body = Buffer.from(healthPayload(), 'utf8');
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length });
+    res.end(body);
+    return;
+  }
+
+  // 各游戏都把图标内联成了 data URI，但浏览器仍会去根路径要 favicon.ico。
+  // 给一个空的 204，控制台就不会留一条永远修不掉的 404 噪声。
+  if (inner === '/favicon.ico') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  /**
+   * 设计令牌：游戏页会被注入指向这里的 <link>。
+   *
+   * 走服务端而不是让每份产物各带一份，好处是改令牌只改这一个文件，
+   * 7 个游戏立刻生效、不用重建产物。构建时它会被拷进 build/www。
+   */
+  if (inner === '/design-tokens.css') {
+    try {
+      const css = await fs.readFile(path.join(ROOT, 'design-tokens.css'));
+      res.writeHead(200, {
+        'content-type': 'text/css; charset=utf-8',
+        'content-length': css.length,
+        // 令牌会随设计规范演进，但不必每次都回源：给个短缓存折中
+        'cache-control': 'public, max-age=300',
+      });
+      res.end(css);
+    } catch {
+      sendText(res, 404, 'design-tokens.css 缺失');
+    }
+    return;
+  }
+
+  // 门户页需要知道自己在哪个前缀下，才能把「进入游戏」的链接拼对。
+  // 注入成一个只读的全局量，避免前端再猜一次路径。
+  if (inner === '/' || inner === '/index.html') {
+    const portal = await fs.readFile(path.join(ROOT, 'index.html'), 'utf8');
+    const injected = portal.replace(
+      '<!--MOUNT-PREFIX-->',
+      `<script>window.__GAMES_PREFIX__=${JSON.stringify(GATEWAY_PREFIX)};</script>`,
+    );
+    const body = Buffer.from(injected, 'utf8');
+    res.writeHead(200, {
+      'content-type': MIME['.html'],
+      'content-length': body.length,
+      'cache-control': 'no-cache',
+    });
+    res.end(body);
+    return;
+  }
+
+  const file = resolveAsset(inner);
+  if (!file) {
+    sendText(res, 403, 'forbidden');
+    return;
+  }
+
+  try {
+    const info = await fs.stat(file);
+    if (!info.isFile()) throw new Error('not a file');
+    /**
+     * 只给「游戏首页」注入返回按钮。
+     *
+     * 判据用解析后的真实文件名，不用 inner：inner 是请求路径，可能是
+     * /games/tank/（目录形式，basename 为空），也可能是 /games/tank/index.html。
+     * resolveAsset 已经把前者归一成 .../index.html，所以看 file 才准。
+     *
+     * 三个条件缺一不可：
+     *   路径在 /games/ 下   —— 别把门户页或别的 HTML 也改了
+     *   文件名是 index.html —— 游戏内二级 HTML（如果有）不加，避免到处浮按钮
+     *   扩展名是 .html     —— 资源文件一律不动
+     */
+    const isGameEntry =
+      inner.startsWith('/games/') && path.basename(file) === 'index.html';
+    await sendFile(res, file, {
+      immutable: inner.startsWith('/games/') && inner.includes('/assets/'),
+      inject: isGameEntry ? (html) => withDesign(html, GATEWAY_PREFIX) : null,
+    });
+  } catch {
+    // 目录省略结尾斜杠时补一次重定向，其余按 404 处理（不做 SPA 回退：
+    // 每个游戏都是独立的多页产物，回退到门户反而会把错误藏起来）
+    if (!inner.endsWith('/') && !path.extname(inner)) {
+      const asDir = resolveAsset(inner + '/');
+      try {
+        const s = await fs.stat(asDir);
+        if (s.isFile()) {
+          const { prefix } = splitPath(url.pathname);
+          res.writeHead(302, { location: `${prefix}${inner}/` });
+          res.end();
+          return;
+        }
+      } catch {
+        /* 落到 404 */
+      }
+    }
+    sendText(res, 404, `未找到 ${inner}`);
+  }
+}
+
+/* ── 监听 ───────────────────────────────────────────────────────── */
+
+/**
+ * 每个监听点一个 http.Server。
+ *
+ * 必须这样拆：Node 的 Server.listen() 一个实例只能绑一个地址，对已 listen
+ * 的实例再调 listen 会直接抛 ERR_SERVER_ALREADY_LISTEN。端口与网关
+ * Unix Socket 是两个不同地址，所以是「同一套请求处理 + 两个 Server」，
+ * 不是「一个 Server 监听两次」。
+ */
+function makeServer() {
+  const server = http.createServer((req, res) => {
+    handle(req, res).catch((err) => {
+      console.error('[collection] 请求处理异常', err);
+      if (!res.headersSent) sendText(res, 500, 'internal error');
+    });
+  });
+  // WebSocket 升级由各自的 server 承担，所以每个 Server 都要挂一次
+  tank.attach(server);
+  return server;
+}
+
+function listen(server, target, label) {
+  return new Promise((resolve, reject) => {
+    const onError = (err) => reject(new Error(`${label} 监听失败：${err.message}`));
+    server.once('error', onError);
+    const done = () => {
+      server.off('error', onError);
+      resolve();
+    };
+    if (typeof target === 'number') server.listen(target, HOST, done);
+    else server.listen(target, done);
+  });
+}
+
+const servers = [];
+const started = [];
+
+if (PORT > 0) {
+  const s = makeServer();
+  await listen(s, PORT, `端口 ${PORT}`);
+  servers.push(s);
+  started.push(`http://${HOST}:${PORT}/`);
+}
+
+if (SOCKET) {
+  // 上一次异常退出可能留下同名 socket 文件，不删会绑不上
+  await fs.unlink(SOCKET).catch(() => {});
+  const s = makeServer();
+  await listen(s, SOCKET, `socket ${SOCKET}`);
+  await fs.chmod(SOCKET, 0o660).catch(() => {});
+  servers.push(s);
+  started.push(`unix:${SOCKET} (${GATEWAY_PREFIX || '/'})`);
+}
+
+if (servers.length === 0) {
+  console.error('[collection] 既没有 PORT 也没有 GATEWAY_SOCKET_PATH，无处监听');
+  process.exit(1);
+}
+
+console.log(`[collection] 服务已启动：${started.join(' | ')}`);
+console.log(`[collection] 静态根 ${ROOT}`);
+
+/* ── 优雅退出：网关反复重启时不能留僵尸 socket ──────────────────── */
+
+let stopping = false;
+async function shutdown(signal) {
+  if (stopping) return;
+  stopping = true;
+  console.log(`[collection] 收到 ${signal}，正在退出`);
+  tank.close();
+  await Promise.all(servers.map((s) => new Promise((resolve) => s.close(resolve))));
+  if (SOCKET) await fs.unlink(SOCKET).catch(() => {});
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));

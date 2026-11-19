@@ -1,0 +1,15 @@
+{
+  "name": "3d-game-collection",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "七个纯前端 3D 小游戏的合集：门户页 + 单进程服务 + fnOS 应用包",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "serve": "node server/index.mjs",
+    "pack": "node scripts/pack.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

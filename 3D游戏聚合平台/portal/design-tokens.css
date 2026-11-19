@@ -1,0 +1,159 @@
+/**
+ * 3D 游戏合集 · 统一设计令牌（唯一可执行副本）
+ *
+ * 详情与理由见 docs/设计语言规范.md。这里只放「值」和最小必要的重置，
+ * 各游戏通过平台注入引用它，不各自复制一份数值（复制就会各自漂移）。
+ *
+ * 设计约束：
+ *   1. 只定义 token 与少量通用组件类，不覆盖游戏自己的布局
+ *   2. 所有声明都在 :root 上，用 CSS 变量，游戏自己的 --accent 会覆盖
+ *   3. 不引入 @import、不引外部字体，断网也一致
+ */
+
+:root {
+  /* ── 字体：界面一律 sans，数字读数用 mono ─────────────────── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+
+  /* ── 底色与层次：7 个游戏共用 ─────────────────────────────── */
+  --bg: #0a0d16;
+  --panel: rgba(16, 21, 34, 0.88);
+  --panel-2: rgba(24, 31, 48, 0.92);
+  --line: rgba(140, 165, 210, 0.16);
+  --line-soft: rgba(140, 165, 210, 0.09);
+
+  /* ── 文字 ─────────────────────────────────────────────────── */
+  --text: #e8edf7;
+  --muted: #93a0b8;
+  --dim: #64708a;
+
+  /* ── 语义色：含义固定，不跟游戏变 ─────────────────────────── */
+  --ok: #5fd08a;
+  --warn: #e8a33a;
+  --danger: #e05a4f;
+
+  /* ── 强调色：各游戏覆盖这三个，保留自己的个性 ─────────────── */
+  --accent: #7aa2ff;
+  --accent-2: #6cf0a8;
+  --accent-dim: rgba(122, 162, 255, 0.16);
+
+  /* ── 圆角：只有四档，禁止中间值 ───────────────────────────── */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-pill: 999px;
+
+  /* ── 间距 ─────────────────────────────────────────────────── */
+  --gap-1: 6px;
+  --gap-2: 12px;
+  --gap-3: 20px;
+  --gap-4: 32px;
+
+  /* ── 动效：时长与缓动统一 ─────────────────────────────────── */
+  --t-fast: 120ms;
+  --t: 180ms;
+  --ease: ease;
+
+  /* ── 阴影 ─────────────────────────────────────────────────── */
+  --shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 4px 12px -6px rgba(0, 0, 0, 0.6);
+}
+
+/* ── 通用按钮：三档，游戏可直接用 class，也可只取变量 ───────── */
+
+.dl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-1);
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: transform var(--t) var(--ease), background-color var(--t) var(--ease),
+    border-color var(--t) var(--ease), opacity var(--t) var(--ease);
+  user-select: none;
+}
+.dl-btn:disabled,
+.dl-btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 主按钮：强调色实底 + 深色文字 */
+.dl-btn--primary {
+  background: var(--accent);
+  color: #08101c;
+}
+.dl-btn--primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+/* 次按钮：透明底 + 描边 */
+.dl-btn--ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+.dl-btn--ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 图标按钮：32×32，无边框 */
+.dl-iconbtn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--t) var(--ease), color var(--t) var(--ease);
+}
+.dl-iconbtn:hover {
+  background: var(--line-soft);
+  color: var(--text);
+}
+
+/* ── 数字读数：等宽，跳动不抖 ─────────────────────────────── */
+.dl-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* ── 徽标 / tag ───────────────────────────────────────────── */
+.dl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+/* ── 尊重系统的减弱动效设置 ───────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .dl-btn,
+  .dl-iconbtn {
+    transition: none;
+  }
+}
