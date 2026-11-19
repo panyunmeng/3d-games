@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover：让 UI 能用 env(safe-area-inset-*) 避开刘海/底部横条；
+         禁 user-scalable：双指缩放交给 canvas 的相机逻辑，不让浏览器整页缩放抢手势 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:," />
+    <title>机甲防线 · MECH BASTION</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport"></canvas>
+      <div id="ui"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

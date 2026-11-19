@@ -1,0 +1,23 @@
+{
+  "name": "mech-bastion-3d",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "机甲防线 — 3D 塔防（Three.js + TypeScript）",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5317 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5318 --strictPort",
+    "build:single": "tsc --noEmit && vite build && node tools/inline-build.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
